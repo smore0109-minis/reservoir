@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'"
+    />
+    <title>退休資產規劃器</title>
+    <meta name="theme-color" content="#eef2f6" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="theme.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="app-version">RETIREMENT ASSET PLANNER</p>
+        <h1>退休資產規劃器</h1>
+      </div>
+      <div class="header-actions">
+        <label class="theme-picker"
+          ><span>配色</span
+          ><select id="theme-select">
+            <option value="pastel">柔和淺色</option>
+            <option value="night">彩色深色</option>
+            <option value="classic">經典深綠</option>
+          </select></label
+        ><button class="ghost" id="language-toggle" type="button">English</button
+        ><button class="ghost" id="reset">還原範例</button><button class="primary" id="save">儲存設定</button>
+      </div>
+    </header>
+    <main>
+      <section class="plan-context" hidden>
+        <p id="plan-context-summary"></p>
+        <button id="edit-main-plan" type="button" class="ghost">編輯我的計畫</button>
+      </section>
+      <p id="plan-rule-summary" class="hint" hidden></p>
+      <nav class="app-tabs" role="tablist" aria-label="工具分頁">
+        <button role="tab" id="plans-tab" aria-controls="plans-view" aria-selected="false" data-view="plans-view">
+          方案管理
+        </button>
+        <button
+          class="selected"
+          role="tab"
+          id="planner-tab"
+          aria-controls="planner-view"
+          aria-selected="true"
+          data-view="planner-view"
+        >
+          固定情境
+        </button>
+        <button
+          role="tab"
+          id="scenario-comparison-tab"
+          aria-controls="scenario-comparison-view"
+          aria-selected="false"
+          data-view="scenario-comparison-view"
+        >
+          情境比較
+        </button>
+        <button
+          role="tab"
+          id="monte-carlo-tab"
+          aria-controls="monte-carlo-view"
+          aria-selected="false"
+          data-view="monte-carlo-view"
+        >
+          多路徑模擬
+        </button>
+      </nav>
+      <section class="shared-plan-selector">
+        <label
+          >使用方式
+          <select id="shared-plan-mode">
+            <option value="single">單方案</option>
+            <option value="comparison">多方案比較</option>
+          </select></label
+        >
+        <fieldset id="single-plan-selector">
+          <legend>選擇方案</legend>
+          <div id="single-plan-options"></div>
+        </fieldset>
+        <p id="shared-plan-summary" class="hint"></p>
+      </section>
+      <section class="app-view" role="tabpanel" aria-labelledby="plans-tab" id="plans-view" hidden>
+        <section class="panel">
+          <h2>方案管理</h2>
+          <p>固定情境與 MC 共用這裡的方案；編輯一次，兩邊都使用最新設定。市場路徑與抽樣假設仍各自設定。</p>
+          <details class="settings-fold" id="comparison-settings" open="">
+            <summary id="comparison-settings-title">獨立比較方案 · 保留舊 A／B／C</summary>
+            <div id="comparison-workspace" hidden="">
+              <div class="monte-carlo-profile-actions" id="monte-carlo-profile-actions"></div>
+              <div id="profile-copy-confirmation" class="allocation-preview" hidden>
+                <p id="profile-copy-message" role="status"></p>
+                <button type="button" id="confirm-profile-copy" class="primary">確認更新</button>
+                <button type="button" id="cancel-profile-copy">取消</button>
+              </div>
+              <div id="plan-differences"></div>
+              <div id="monte-carlo-plan-cards"></div>
+            </div>
+          </details>
+        </section>
+      </section>
+      <section class="summary-grid plan-summary" id="summary" hidden></section>
+      <section class="app-view" role="tabpanel" aria-labelledby="planner-tab" id="planner-view">
+        <section class="panel scenario-panel">
+          <div class="scenario-header">
+            <div>
+              <p class="eyebrow">SCENARIO LAB</p>
+              <h2>情境下的資產續航</h2>
+              <p id="fixed-single-description">
+                使用目前選定方案，檢查指定假設下的 30 年資產與生活費。逐年路徑不帶入 MC。
+              </p>
+            </div>
+            <div class="segmented" id="scenario-tabs">
+              <button data-scenario="bull">牛市</button><button data-scenario="base" class="selected">基準</button
+              ><button data-scenario="bear">熊市</button><button data-scenario="historical">歷史</button>
+            </div>
+          </div>
+          <label class="comparison-toggle" hidden
+            ><input id="fixed-comparison-enabled" type="checkbox" /><span>比較 A／B／C</span></label
+          >
+          <p id="fixed-comparison-help" class="hint" hidden>
+            使用方案管理中的參與方案，共用固定情境年度路徑與意外支出。單方案模式可編輯逐年路徑。
+          </p>
+          <button id="edit-comparison-plans" type="button" class="ghost" hidden>編輯 A／B／C</button>
+          <div class="historical-path" id="historical-path" hidden="">
+            <strong>歷史市場回放</strong>
+            <small id="historical-path-note">會覆蓋 30 年核心報酬，並同步載入所選市場相同年份的 CPI。</small>
+            <label>市場<select id="historical-market"></select></label>
+            <label
+              >順序<select id="historical-direction">
+                <option value="forward">依時間順序</option>
+                <option value="reverse">倒放（最新年先）</option>
+              </select></label
+            >
+            <label>期間<select id="historical-start"></select></label>
+            <div class="historical-path-actions">
+              <button class="ghost" id="apply-historical-path">套用 30 年歷史路徑</button>
+            </div>
+          </div>
+          <div id="scenario-content"></div>
+        </section>
+        <div id="planner-main-plan-host" hidden>
+          <details class="settings-fold" id="main-plan-editor">
+            <summary id="main-plan-editor-label">編輯我的計畫 · 配置、收入與提款規則</summary>
+            <section class="panel allocation-panel">
+              <section class="summary-grid reservoir-metrics" id="reservoir-metrics"></section>
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">YOUR RESERVOIRS</p>
+                  <h2>四層水庫配置</h2>
+                </div>
+                <span class="pill" id="allocation-status"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>水庫</th>
+                      <th>配置金額</th>
+                      <th>現金流配息率</th>
+                      <th>配置比例</th>
+                      <th>投資標的 / 定位</th>
+                    </tr>
+                  </thead>
+                  <tbody id="buckets"></tbody>
+                </table>
+              </div>
+              <p class="hint coverage-warning" id="coverage-warning" hidden=""></p>
+              <p class="hint">支應比例只調整未來補水目標。初始金額可直接修改，或預覽後套用目標配置。</p>
+              <button id="preview-allocation" type="button">依支應目標預覽初始配置</button>
+              <div id="allocation-preview" class="allocation-preview" hidden=""></div>
+              <p class="hint">提示：變更金額、預期報酬或收益率後，模擬結果會即時更新。設定會保存在這台電腦。</p>
+              <p class="hint bxm-model-note" id="bxm-model-note" hidden="">
+                BXM 是 buy-write 指數策略，不保證防跌或現金流。BXM 模型以月頻市場校準與 Monte Carlo
+                專屬殘差估計總報酬；未納入稅、交易成本、基金費用差異、實際基金追蹤誤差或 option-income 的稅務特性。
+              </p>
+              <section class="withdrawal-settings" aria-labelledby="withdrawal-settings-title">
+                <div class="settings-heading">
+                  <p class="eyebrow">WITHDRAWAL RULE</p>
+                  <h2 id="withdrawal-settings-title">提領與補水規則</h2>
+                </div>
+                <!-- Legacy placement retained only in this source history; the live controls are above Scenario Lab.
+                <div class="legacy-plan-inputs">
+                  <label
+                    >首年全年生活費
+                    <div class="input-suffix prefix">
+                      <span>$</span><input id="legacy-annual-spend" type="number" min="0" step="1000" /></div
+                  ></label>
+                  <label
+                    ><span class="label-with-help"
+                      >首年必要生活費（Floor）
+                      <button
+                        class="help-tooltip"
+                        type="button"
+                        aria-label="必要生活費底線說明：填入維持家庭運轉所需的首年最低年度支出；0 表示關閉。此金額每年依 CPI 成長，護欄不可將生活費砍到其下。熊市凍結核心 ETF 時，僅為補足這段必要支出才會被迫出售核心 ETF。"
+                        data-tooltip="填入房租、基本伙食、保險、稅與醫療等首年必要帳單；0 表示關閉。Floor 每年依 CPI 成長，護欄不可將生活費砍到其下。熊市凍結核心 ETF 時，只有這一段必要支出可被迫出售核心 ETF。"
+                      >
+                        ?
+                      </button></span
+                    >
+                    <div class="input-suffix prefix">
+                      <span>$</span><input id="legacy-spending-floor" type="number" min="0" step="1000" />
+                    </div>
+                    <small class="floor-presets"
+                      >對照：<button type="button" data-floor-percent="50">50%</button
+                      ><button type="button" data-floor-percent="60">60%</button
+                      ><button type="button" data-floor-percent="70">70%</button
+                      ><button type="button" data-floor-percent="80">80%</button> 原始計畫</small
+                    ><small class="floor-input-warning" id="legacy-floor-input-warning" hidden=""></small
+                  ></label>
+                </div> -->
+                <label
+                  >年通膨率
+                  <div class="input-suffix">
+                    <input id="inflation" type="number" min="0" step="0.1" /><span>%</span>
+                  </div></label
+                >
+
+                <div class="guardrail-settings">
+                  <label
+                    ><span class="label-with-help"
+                      >熊市下跌門檻
+                      <button
+                        class="help-tooltip"
+                        type="button"
+                        aria-label="熊市下跌門檻說明：核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年度標記為凍結。必要生活費 Floor 與非計畫支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。"
+                        data-tooltip="核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為「凍結」——避免在低點賣出而把虧損鎖死。必要生活費 Floor 與非計畫支出無法調降，仍可突破門檻出售核心 ETF，並分別標記原因。"
+                      >
+                        ?
+                      </button></span
+                    >
+                    <div class="input-suffix">
+                      <input id="bear-threshold" type="number" max="0" step="1" /><span>%</span>
+                    </div></label
+                  >
+                  <div class="guardrail-pairs">
+                    <label
+                      ><span class="label-with-help"
+                        >放寬觸發門檻（提領率 ＜）
+                        <button
+                          class="help-tooltip"
+                          type="button"
+                          aria-label="提領護欄說明：年度支出成長一律以當年通膨為基準。提領率低於放寬觸發門檻時，成長為 CPI 加上放寬幅度；高於收緊觸發門檻時，成長為 CPI 減去收緊幅度；落在兩者之間時剛好跟上 CPI。提領率是當年支出除以年初總資產，低代表資產相對支出寬裕。幅度是實質的，因此同一組設定在任何通膨年代代表同一條規則。調整後不會越過另一個門檻，剛好落在門檻上不動作。"
+                          data-tooltip="年度支出成長一律以當年通膨為基準：提領率 ＜ 放寬門檻 → CPI ＋ 放寬幅度；提領率 ＞ 收緊門檻 → CPI － 收緊幅度；落在中間 → 剛好跟上 CPI。提領率 = 當年支出 ÷ 年初總資產，低代表資產相對支出寬裕。幅度是實質的，同一組設定在任何通膨年代都代表同一條規則。調整後不會越過另一個門檻；剛好落在門檻上不動作。"
+                        >
+                          ?
+                        </button></span
+                      >
+                      <div class="input-suffix">
+                        <input id="guardrail-lower" type="number" min="0" step="0.1" /><span>%</span>
+                      </div></label
+                    >
+                    <label
+                      >放寬幅度（CPI ＋）
+                      <div class="input-suffix">
+                        <input id="guardrail-raise" type="number" min="0" step="0.5" /><span>%</span>
+                      </div></label
+                    >
+                    <label
+                      >收緊觸發門檻（提領率 ＞）
+                      <div class="input-suffix">
+                        <input id="guardrail-upper" type="number" min="0" step="0.1" /><span>%</span>
+                      </div></label
+                    >
+                    <label
+                      >收緊幅度（CPI －）
+                      <div class="input-suffix">
+                        <input id="guardrail-cut" type="number" min="0" step="0.5" /><span>%</span>
+                      </div></label
+                    >
+                  </div>
+                  <p class="field-error" id="guardrail-error" hidden=""></p>
+                </div>
+                <details class="rule-advanced">
+                  <summary>進階設定 <small>提款順序</small></summary>
+                  <div class="withdrawal-order">
+                    <strong>生活費提款順序</strong>
+                    <small>現金流 ETF 配息固定優先；其餘來源可調整。</small>
+                    <ol id="planned-withdrawal-order"></ol>
+                  </div>
+                  <div class="withdrawal-order">
+                    <strong>非計畫支出順序</strong>
+                    <small>可選方案或改為自訂順序。</small>
+                    <div class="event-policy-buttons" id="event-policy-buttons">
+                      <button data-event-policy="alpha">甲</button><button data-event-policy="beta">乙</button
+                      ><button data-event-policy="gamma">丙</button><button data-event-policy="custom">自訂</button>
+                    </div>
+                    <small id="event-policy-description"></small>
+                    <ol id="event-withdrawal-order"></ol>
+                  </div>
+                </details>
+              </section>
+            </section>
+            <details class="settings-fold" id="monte-carlo-profile-summary-details">
+              <summary>防守安全水庫 · 美國國債梯</summary>
+              <section class="panel ladder-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">TREASURY LADDER</p>
+                    <h2>防守安全水庫 · 美國國債梯</h2>
+                  </div>
+                  <span class="pill" id="ladder-total"></span>
+                </div>
+                <div class="ladder-controls">
+                  <label
+                    >梯長<select id="ladder-length">
+                      <option value="3">3 年</option>
+                      <option value="5">5 年</option>
+                    </select></label
+                  ><label class="ladder-drawdown-toggle"
+                    ><input id="ladder-drawdown-enabled" type="checkbox" /> 自動縮短</label
+                  ><label id="ladder-drawdown-config" hidden=""
+                    >第 <input id="ladder-drawdown-years" type="number" min="1" max="30" step="1" /> 年將補梯目標降至 1
+                    年</label
+                  ><span>縮短只停止補買到期梯級，不提前出售既有國債。</span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>到期年度</th>
+                        <th>面額 / 本金</th>
+                        <th>年度票息</th>
+                        <th>當年到期現金流</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ladder-rungs"></tbody>
+                  </table>
+                </div>
+              </section>
+            </details>
+            <details class="settings-fold">
+              <summary>保證性收入 · Social Security 與年金</summary>
+              <section class="panel ladder-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">GUARANTEED INCOME</p>
+                    <h2>保證性收入 · Social Security 與年金</h2>
+                  </div>
+                  <span class="pill" id="income-total"></span>
+                </div>
+                <div class="ladder-controls">
+                  <button id="add-income" type="button">新增來源</button
+                  ><span
+                    >金額一律填「第 1 年幣值」：<b>隨 CPI</b> 的購買力永遠等於你填的數字（my Social Security
+                    的估算就是今日美元），<b>名目固定</b> 則從第 1 年就開始貶值。這筆錢每年年初進緊急預備金，
+                    生活費照原本的提領鏈支付，年末用不完的走既有補水級聯回核心 ETF。</span
+                  >
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>名稱</th>
+                        <th>年金額（第 1 年幣值）</th>
+                        <th>起領年</th>
+                        <th>結束年</th>
+                        <th>通膨調整</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="income-sources"></tbody>
+                  </table>
+                </div>
+              </section>
+            </details>
+          </details>
+        </div>
+      </section>
+      <section
+        class="app-view"
+        role="tabpanel"
+        aria-labelledby="scenario-comparison-tab"
+        id="scenario-comparison-view"
+        hidden
+      >
+        <section class="panel">
+          <h2>情境比較</h2>
+          <p class="hint">固定計畫，比較不同市場的歷史路徑；此頁選擇獨立保存。</p>
+          <div id="scenario-comparison-content"></div>
+        </section>
+      </section>
+      <section class="app-view" role="tabpanel" aria-labelledby="monte-carlo-tab" id="monte-carlo-view" hidden="">
+        <section class="panel monte-carlo-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">MONTE CARLO</p>
+              <h2>30 年隨機路徑壓力測試</h2>
+            </div>
+            <button class="primary" id="run-monte-carlo">執行模擬</button>
+          </div>
+
+          <button type="button" class="ghost" id="return-fixed-plan">返回固定情境</button>
+          <div class="monte-carlo-profile">
+            <div>
+              <strong id="monte-carlo-profile-title">退休計畫快照</strong>
+              <small>固定情境與 MC 使用相同的單選方案或參與比較方案。</small>
+            </div>
+            <label class="comparison-toggle" hidden
+              ><input id="monte-carlo-comparison-enabled" type="checkbox" /> <span>啟用方案比較</span></label
+            >
+            <details class="settings-fold">
+              <summary>查看本次計畫摘要</summary>
+              <div id="monte-carlo-profile-summary"></div>
+            </details>
+          </div>
+          <p id="mc-assumptions-summary" class="hint"></p>
+          <div id="monte-carlo-content" class="monte-carlo-empty">
+            設定完成後執行模擬，檢視隨機報酬路徑下的資產耗盡風險。
+          </div>
+          <section id="representative-detail" class="panel" hidden=""></section>
+          <div id="mc-main-plan-host"></div>
+          <details class="settings-fold" id="mc-settings">
+            <summary>測試假設與進階設定</summary>
+            <div class="monte-carlo-controls">
+              <label
+                >非核心資產情境<select id="monte-carlo-scenario">
+                  <option value="bull">牛市</option>
+                  <option value="base">基準情境</option>
+                  <option value="bear">熊市</option>
+                </select></label
+              >
+              <label
+                >路徑數<select id="monte-carlo-paths">
+                  <option value="500">500</option>
+                  <option value="1000" selected="">1,000</option>
+                  <option value="5000">5,000</option>
+                </select></label
+              >
+              <div class="monte-carlo-seed-control">
+                <label>隨機種子<input id="monte-carlo-seed" type="number" min="0" max="4294967295" step="1" /></label>
+                <button class="ghost" id="generate-monte-carlo-seed" type="button">產生新種子</button>
+                <label class="previous-seed" id="previous-monte-carlo-seed" hidden=""
+                  >上一個種子（可選取複製）<input id="previous-monte-carlo-seed-value" type="text" readonly="" />
+                </label>
+              </div>
+              <div class="monte-carlo-sampling-pair">
+                <label
+                  >抽樣方式<select id="monte-carlo-sampling-mode">
+                    <option value="parametric">參數式（平均值＋波動率）</option>
+                    <option value="historical">歷史區塊抽樣</option>
+                  </select></label
+                >
+                <label
+                  >年化平均報酬
+                  <div class="input-suffix">
+                    <input id="monte-carlo-mean" type="number" min="-99" max="100" step="0.1" /><span>%</span>
+                  </div>
+                </label>
+              </div>
+              <label class="historical-sampling-control" hidden=""
+                >歷史市場<select id="monte-carlo-historical-market"></select
+              ></label>
+              <label class="historical-sampling-control" hidden=""
+                >區塊長度<select id="monte-carlo-historical-block-length">
+                  <option value="1">1 年</option>
+                  <option value="2">2 年</option>
+                  <option value="3">3 年</option>
+                </select></label
+              >
+              <label class="historical-sampling-control" hidden=""
+                ><span class="label-with-help"
+                  >年度擾動
+                  <button
+                    class="help-tooltip"
+                    type="button"
+                    aria-label="年度擾動說明：歷史區塊抽樣時，在每個保留年度報酬上加入最多 ±X% 的獨立隨機擾動；0% 表示完全使用原始年度資料。它只改變該年度報酬，不改變區塊順序或通膨路徑。"
+                    data-tooltip="歷史區塊抽樣時，在每個保留年度報酬上加入最多 ±X% 的獨立隨機擾動；0% 表示完全使用原始年度資料。它只改變該年度報酬，不改變區塊順序或通膨路徑。"
+                  >
+                    ?
+                  </button></span
+                ><select id="monte-carlo-historical-jitter">
+                  <option value="0">不擾動</option>
+                  <option value="5">±5%</option>
+                  <option value="10">±10%</option>
+                </select></label
+              >
+              <label
+                ><span class="label-with-help"
+                  >年化波動率
+                  <button
+                    class="help-tooltip"
+                    type="button"
+                    aria-label="年化波動率說明：模型抽樣出的核心 ETF 年度簡單報酬標準差。設定 18% 表示報酬相對平均報酬的典型波動幅度約為正負 18 個百分點；它不是保證上下限。"
+                    data-tooltip="模型抽樣出的核心 ETF 年度簡單報酬標準差。設定 18% 表示報酬相對平均報酬的典型波動幅度約為正負 18 個百分點；它不是保證上下限。"
+                  >
+                    ?
+                  </button></span
+                >
+                <div class="input-suffix">
+                  <input id="monte-carlo-volatility" type="number" min="0" max="200" step="0.1" /><span>%</span>
+                </div>
+              </label>
+              <label
+                ><span class="label-with-help"
+                  >通膨
+                  <button
+                    class="help-tooltip"
+                    type="button"
+                    aria-label="固定通膨使用各方案年通膨率。隨機通膨以各方案年通膨率為中心，共用相同 AR(1) 隨機衝擊；生活費、隨通膨收入與事件金額跟著各自通膨調整。歷史抽樣與壓力路徑使用指定 CPI，不使用方案年通膨率。"
+                    data-tooltip="固定通膨使用各方案年通膨率。隨機通膨以各方案年通膨率為中心，共用相同 AR(1) 隨機衝擊；生活費、隨通膨收入與事件金額跟著各自通膨調整。歷史抽樣與壓力路徑使用指定 CPI，不使用方案年通膨率。"
+                  >
+                    ?
+                  </button></span
+                >
+                <select id="monte-carlo-inflation-model">
+                  <option value="fixed">固定（方案年通膨率）</option>
+                  <option value="ar1">隨機（持續性，1983 年後校準）</option>
+                  <option value="us1966">壓力：1966 年起美國 CPI（70 年代完整一輪）</option>
+                  <option value="us1973">壓力：1973 年起美國 CPI（石油危機起）</option>
+                </select>
+              </label>
+              <div class="monte-carlo-event-pair">
+                <label
+                  >年度意外支出機率
+                  <div class="input-suffix">
+                    <input id="monte-carlo-event-probability" type="number" min="0" max="100" step="0.1" /><span
+                      >%</span
+                    >
+                  </div>
+                </label>
+                <label
+                  ><span class="label-with-help"
+                    >意外支出基準值
+                    <button
+                      class="help-tooltip"
+                      type="button"
+                      aria-label="意外支出基準值說明：單次事件以第 1 年美元計的金額。每一年會依累積通膨調整：第 N 年命中時，金額等於基準值乘上 (1 + 年通膨率) 的 N−1 次方。是否發生則由年度意外支出機率獨立抽樣。"
+                      data-tooltip="單次事件以第 1 年美元計的金額。每一年會依累積通膨調整：第 N 年命中時，金額等於基準值 × (1 + 年通膨率)^(N−1)。是否發生則由年度意外支出機率獨立抽樣。"
+                    >
+                      ?
+                    </button></span
+                  >
+                  <div class="input-suffix prefix">
+                    <span>$</span><input id="monte-carlo-event-amount" type="number" min="0" step="1000" />
+                  </div>
+                </label>
+              </div>
+              <div class="monte-carlo-fixed-event-pair">
+                <label
+                  ><span class="label-with-help"
+                    >確定事件：第幾年
+                    <button
+                      class="help-tooltip"
+                      type="button"
+                      aria-label="確定事件說明：已知一定會發生的一次性支出，例如第 7 年修房子。每條路徑都在同一年支付同一筆錢，用來看這筆支出落在不同市場路徑上的結果分佈。金額以第 1 年美元輸入並依年通膨調整；與抽樣事件同年時兩者相加。比較模式下所有方案共用。留空或金額 0 表示不使用。"
+                      data-tooltip="已知一定會發生的一次性支出（例如第 7 年修房子）。每條路徑都在同一年付同一筆錢，看它落在不同市場路徑上的結果分佈。金額以第 1 年美元輸入、依年通膨調整；與抽樣事件同年時相加。比較模式下所有方案共用。留空或金額 0 表示不使用。"
+                    >
+                      ?
+                    </button></span
+                  >
+                  <div class="input-suffix">
+                    <input
+                      id="monte-carlo-fixed-event-year"
+                      type="number"
+                      min="1"
+                      max="30"
+                      step="1"
+                      placeholder="留空＝不使用"
+                    /><span>年</span>
+                  </div>
+                </label>
+                <label
+                  >確定事件金額
+                  <div class="input-suffix prefix">
+                    <span>$</span><input id="monte-carlo-fixed-event-amount" type="number" min="0" step="1000" />
+                  </div>
+                </label>
+              </div>
+            </div>
+          </details>
+        </section>
+      </section>
+    </main>
+    <template id="bucket-template"
+      ><tr>
+        <td>
+          <div class="bucket-name">
+            <i></i>
+            <div><input class="bucket-title" type="text" aria-label="水庫名稱" /><small></small></div>
+          </div>
+        </td>
+        <td>
+          <div class="money-input"><span>$</span><input class="amount" type="number" min="0" step="10000" /></div>
+        </td>
+        <td class="yield-cell">
+          <div class="input-suffix compact">
+            <input class="yield" type="number" min="0" step="0.1" aria-label="現金流配息率" /><span>%</span>
+          </div>
+        </td>
+        <td class="ratio"></td>
+        <td><input class="assets" type="text" /><small class="purpose"></small></td></tr
+    ></template>
+    <script src="simulate.js"></script>
+    <script src="presentation.js"></script>
+    <script src="fixed-comparison.js"></script>
+    <script src="worker-client.js"></script>
+    <script src="app.js"></script>
+    <script src="web-version.js"></script>
+    <script src="pwa.js"></script>
+  </body>
+</html>
