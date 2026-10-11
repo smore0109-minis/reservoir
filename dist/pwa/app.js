@@ -469,7 +469,15 @@
     '鎖定目前總額；之後由核心增值 ETF 自動補足差額':
       'Lock the current total; the Core growth ETF fills the difference automatically.',
     鎖定的起始流動資產: 'Locked initial liquid assets',
-    首年預計支出輸入週期: 'First-year planned spending input period',
+    生活費輸入週期: 'Spending input period',
+    '首年生活費 · 每年': 'First-year spending · Annual',
+    '首年生活費 · 每月': 'First-year spending · Monthly',
+    '必要生活費 · 每年': 'Essential spending · Annual',
+    '必要生活費 · 每月': 'Essential spending · Monthly',
+    '首年預計支出 · 每年': 'First-Year Planned Spending · Annual',
+    '首年預計支出 · 每月': 'First-Year Planned Spending · Monthly',
+    '必要生活費底線 · 每年': 'Necessary-Spending Floor · Annual',
+    '必要生活費底線 · 每月': 'Necessary-Spending Floor · Monthly',
     '30 年四個水庫及總資產趨勢': '30-year four-bucket and total-assets trend',
     設定本年核心資產報酬: 'Set this year’s core-asset return',
     查看各水庫年末現值: 'View each bucket’s year-end value',
@@ -2927,8 +2935,8 @@
     return html(
       '<article class="metric editable-plan-metric">',
       '<div class="metric-label-row annual-spend-label">',
-      '<label for="annual-spend">首年預計支出</label>',
-      '<select id="annual-spend-period" aria-label="首年預計支出輸入週期">',
+      `<label for="annual-spend">首年預計支出 · ${monthly ? '每月' : '每年'}</label>`,
+      '<select id="annual-spend-period" aria-label="生活費輸入週期">',
       `<option value="annual"${monthly ? '' : ' selected'}>每年</option>`,
       `<option value="monthly"${monthly ? ' selected' : ''}>每月</option>`,
       '</select>',
@@ -2949,10 +2957,12 @@
       initialAssetsCard(sum),
       annualSpendCard(sum),
       editableMoneyCard(
-        '必要生活費底線',
+        `必要生活費底線 · ${annualSpendInputMode === 'monthly' ? '每月' : '每年'}`,
         'spending-floor',
-        state.spendingFloor.annualAmount,
-        state.spendingFloor.annualAmount ? '每年隨 CPI 成長；熊市可為此被迫賣股' : '填入 $0 表示關閉',
+        annualSpendInputMode === 'monthly' ? state.spendingFloor.annualAmount / 12 : state.spendingFloor.annualAmount,
+        state.spendingFloor.annualAmount
+          ? `年度金額 ${money(state.spendingFloor.annualAmount)} · 每年隨 CPI 成長；熊市可為此被迫賣股`
+          : '填入 $0 表示關閉',
         '<small class="floor-presets">對照：<button type="button" data-floor-percent="50">50%</button><button type="button" data-floor-percent="60">60%</button><button type="button" data-floor-percent="70">70%</button><button type="button" data-floor-percent="80">80%</button> 原始計畫</small><small class="floor-input-warning" id="floor-input-warning" hidden></small>',
       ),
     ].join('\n    ');
@@ -2976,8 +2986,13 @@
       const input = $('#' + id);
       input.onchange = event => {
         const key = id === 'spending-floor' ? 'spendingFloorAmount' : 'annualSpend';
-        if (key === 'spendingFloorAmount') state.spendingFloor.annualAmount = clampSetting(key, event.target.value);
-        else {
+        if (key === 'spendingFloorAmount') {
+          const entered = Number(event.target.value);
+          state.spendingFloor.annualAmount = clampSetting(
+            key,
+            annualSpendInputMode === 'monthly' ? entered * 12 : entered,
+          );
+        } else {
           const entered = Number(event.target.value);
           state[key] = clampSetting(key, annualSpendInputMode === 'monthly' ? entered * 12 : entered);
         }
@@ -2986,7 +3001,9 @@
       input.onblur = event => {
         event.target.value =
           id === 'spending-floor'
-            ? state.spendingFloor.annualAmount
+            ? annualSpendInputMode === 'monthly'
+              ? state.spendingFloor.annualAmount / 12
+              : state.spendingFloor.annualAmount
             : annualSpendInputMode === 'monthly'
               ? state.annualSpend / 12
               : state.annualSpend;
@@ -4693,8 +4710,8 @@
             `<div class="comparison-assets"><div class="metric-label-row"><label for="plan-assets-${profile.id}">起始流動資產</label><button type="button" class="lock-button${locked ? ' locked' : ''}" data-plan-lock="${profile.id}" aria-pressed="${locked}">${locked ? '🔒 已鎖定' : '🔓 鎖定'}</button></div><div class="money-input"><span>$</span><input id="plan-assets-${profile.id}" data-plan-total="${profile.id}" type="number" min="0" step="10000" value="${locked ? plan.lockedInitialAssets : total}" ${locked ? '' : 'disabled'} /></div><small>${locked ? '核心 ETF 自動補足差額；其他水庫超過總額時，鎖定總額會提高。' : '鎖定目前總額以比較配置；解鎖可比較不同資產規模。'}</small></div>`,
             '<div class="monte-carlo-plan-fields">',
             `<label>方案名稱<input data-plan-name="${profile.id}" type="text" maxlength="40" value="${escapeHtml(profile.name)}"/></label>`,
-            `<div class="plan-spend-field"><div class="plan-spend-heading"><label for="plan-spend-${profile.id}">首年生活費</label><select data-plan-spend-period="${profile.id}" aria-label="首年預計支出輸入週期"><option value="annual"${monthlySpend ? '' : ' selected'}>每年</option><option value="monthly"${monthlySpend ? ' selected' : ''}>每月</option></select></div><div class="input-suffix prefix"><span>$</span><input id="plan-spend-${profile.id}" data-plan-field="annualSpend" data-profile="${profile.id}" type="number" min="0" step="any" value="${monthlySpend ? plan.annualSpend / 12 : plan.annualSpend}"/></div></div>`,
-            `<label>必要生活費<div class="input-suffix prefix"><span>$</span><input data-plan-field="spendingFloor.annualAmount" data-profile="${profile.id}" type="number" min="0" step="1000" value="${plan.spendingFloor.annualAmount}"/></div></label>`,
+            `<div class="plan-spend-field"><div class="plan-spend-heading"><label for="plan-spend-${profile.id}">首年生活費 · ${monthlySpend ? '每月' : '每年'}</label><select data-plan-spend-period="${profile.id}" aria-label="生活費輸入週期"><option value="annual"${monthlySpend ? '' : ' selected'}>每年</option><option value="monthly"${monthlySpend ? ' selected' : ''}>每月</option></select></div><div class="input-suffix prefix"><span>$</span><input id="plan-spend-${profile.id}" data-plan-field="annualSpend" data-profile="${profile.id}" type="number" min="0" step="any" value="${monthlySpend ? plan.annualSpend / 12 : plan.annualSpend}"/></div></div>`,
+            `<label>必要生活費 · ${monthlySpend ? '每月' : '每年'}<div class="input-suffix prefix"><span>$</span><input data-plan-field="spendingFloor.annualAmount" data-profile="${profile.id}" type="number" min="0" step="any" value="${monthlySpend ? plan.spendingFloor.annualAmount / 12 : plan.spendingFloor.annualAmount}"/></div></label>`,
             `<label>年通膨率<div class="input-suffix compact"><input data-plan-field="inflation" data-profile="${profile.id}" type="number" min="-99" max="100" step="0.1" value="${plan.inflation}"/><span>%</span></div></label>`,
             ...plan.buckets.map(
               bucket =>
@@ -4797,7 +4814,8 @@
           let target = draft;
           keys.slice(0, -1).forEach(key => (target = target[key]));
           const monthly =
-            keys[0] === 'annualSpend' && planSpendInputModes.get(event.target.dataset.profile) === 'monthly';
+            ['annualSpend', 'spendingFloor'].includes(keys[0]) &&
+            planSpendInputModes.get(event.target.dataset.profile) === 'monthly';
           target[keys.at(-1)] = Number(event.target.value) * (monthly ? 12 : 1);
         });
       };
