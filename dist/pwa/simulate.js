@@ -22,7 +22,7 @@
     bearThreshold: -15,
     coreReturns: {},
     emergencyEvents: {},
-    // 非計畫支出是使用者逐年輸入的，但複製 Monte Carlo 代表路徑時會整批寫入一組**隨機生成**
+    // 意外支出是使用者逐年輸入的，但複製 Monte Carlo 代表路徑時會整批寫入一組**隨機生成**
     // 的事件。兩者長得一模一樣，所以「該不該清掉」無法從 emergencyEvents 本身推導——這個
     // 旗標記的就是那個無法推導的事實。使用者手動改動任何一格即轉為 false：那一刻起這組事件
     // 是他的，不再屬於那條路徑。與 historicalReplay 同一個模式。
@@ -1203,7 +1203,7 @@
   // 規則（水庫配置、提領補水規則），不承載提領軌跡表上一年一格的推演。目前四個：
   //   coreReturns      核心報酬欄，使用者逐年輸入
   //   bxmMonthlyPath   BXM 代表路徑的月頻市場／殘差；只屬於固定情境頁的重播資料
-  //   emergencyEvents  非計畫支出欄，使用者逐年輸入
+  //   emergencyEvents  意外支出欄，使用者逐年輸入
   //   eventsFromPath   上述事件是否來自複製的代表路徑
   //   inflationRates   歷史回放整批寫入的 CPI；表上唯讀顯示，沒有輸入欄
   //   scenario         固定情境頁選中的情境；Monte Carlo 有自己的 monteCarlo.scenario
@@ -1812,7 +1812,7 @@
       const treasuryMaturity = maturingRungs.reduce((sum, rung) => sum + rung.face, 0);
       activeRungs = activeRungs.filter(rung => rung.maturityYear > year);
       treasuryCash += treasuryCoupon + treasuryMaturity;
-      // 非計畫支出與生活費各自有可設定的提款順序；現金流 ETF 本金可以在需要時出售。
+      // 意外支出與生活費各自有可設定的提款順序；現金流 ETF 本金可以在需要時出售。
       const canSellGrowth = returns.growth >= state.bearThreshold;
       let remaining = spend;
       const sources = {};
@@ -2219,7 +2219,28 @@
     };
   }
 
+  // Scheduled event amounts are already nominal. After depletion they are unpaid,
+  // without extending the simulation or inventing income, borrowing or repayments.
+  function eventFundingSummary(result, events = {}) {
+    let total = 0;
+    let firstYear = null;
+    const annual = Array.from({ length: HORIZON_YEARS }, (_, index) => {
+      const year = index + 1;
+      const row = result.years[index];
+      const planned = row ? row.eventSpend : Math.max(0, Number(events[year]) || 0);
+      const unpaid = row ? row.eventUnmet : planned;
+      // Same $1 tolerance as the engine's cumulativeEventUnmet: rounding dust is neither a gap nor part of the total.
+      if (unpaid > 1) {
+        total += unpaid;
+        firstYear ??= year;
+      }
+      return { year, planned, paid: Math.max(0, planned - unpaid), unpaid, stopped: !row };
+    });
+    return { annual, total, firstYear, hasGap: firstYear !== null };
+  }
+
   const exported = {
+    eventFundingSummary,
     DEFAULT,
     scenarios,
     SCENARIO_CORE_RETURN_PATHS,

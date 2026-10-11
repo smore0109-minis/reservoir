@@ -30,9 +30,52 @@
             <option value="classic">經典深綠</option>
           </select></label
         ><button class="ghost" id="language-toggle" type="button">English</button
+        ><button class="ghost" id="open-guide" type="button" aria-haspopup="dialog">入門指南</button
         ><button class="ghost" id="reset">還原範例</button><button class="primary" id="save">儲存設定</button>
       </div>
     </header>
+    <div id="guide-backdrop" class="guide-backdrop" hidden></div>
+    <aside
+      id="guide-drawer"
+      class="guide-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="guide-drawer-title"
+      tabindex="-1"
+      hidden
+    >
+      <header class="guide-drawer-header">
+        <div>
+          <p class="eyebrow">BEGINNER GUIDE</p>
+          <h2 id="guide-drawer-title">入門與名詞指南</h2>
+        </div>
+        <button id="close-guide" class="ghost guide-close" type="button" aria-label="關閉指南">關閉</button>
+      </header>
+      <div class="guide-tools">
+        <label for="guide-search">搜尋指南</label>
+        <input id="guide-search" type="search" placeholder="例如：Floor、配息、P50、護欄" autocomplete="off" />
+        <p id="guide-language-note" class="hint" hidden>完整指南目前提供繁體中文內容。</p>
+      </div>
+      <nav id="guide-toc" class="guide-toc" aria-label="指南目錄" translate="no"></nav>
+      <section class="guide-quick-actions" aria-labelledby="guide-quick-actions-title">
+        <h3 id="guide-quick-actions-title">第一次使用：五步完成</h3>
+        <ol>
+          <li>
+            <button type="button" data-guide-view="plans-view" data-guide-target="annualSpend">設定資產與生活費</button>
+          </li>
+          <li>
+            <button type="button" data-guide-view="plans-view" data-guide-target="spendingFloor.annualAmount">
+              設定必要生活費
+            </button>
+          </li>
+          <li><button type="button" data-guide-view="plans-view" data-guide-target="buckets">確認四個水庫</button></li>
+          <li><button type="button" data-guide-view="planner-view">查看固定情境</button></li>
+          <li><button type="button" data-guide-view="monte-carlo-view">執行多路徑模擬</button></li>
+        </ol>
+      </section>
+      <p id="guide-empty" class="guide-empty" hidden>找不到相符內容，請換一個關鍵詞。</p>
+      <article id="guide-content" class="guide-content" translate="no"></article>
+    </aside>
     <main>
       <section class="plan-context" hidden>
         <p id="plan-context-summary"></p>
@@ -115,6 +158,7 @@
               <p id="fixed-single-description">
                 使用目前選定方案，檢查指定假設下的 30 年資產與生活費。逐年路徑不帶入 MC。
               </p>
+              <button type="button" class="text-button" data-guide-topic="guide-結果與圖表">如何解讀結果？</button>
             </div>
             <div class="segmented" id="scenario-tabs">
               <button data-scenario="bull">牛市</button><button data-scenario="base" class="selected">基準</button
@@ -195,9 +239,10 @@
                   <label
                     ><span class="label-with-help"
                       >首年必要生活費（Floor）
-                      <button
+                    <button
                         class="help-tooltip"
                         type="button"
+                        data-guide-topic="guide-生活費與收入"
                         aria-label="必要生活費底線說明：填入維持家庭運轉所需的首年最低年度支出；0 表示關閉。此金額每年依 CPI 成長，護欄不可將生活費砍到其下。熊市凍結核心 ETF 時，僅為補足這段必要支出才會被迫出售核心 ETF。"
                         data-tooltip="填入房租、基本伙食、保險、稅與醫療等首年必要帳單；0 表示關閉。Floor 每年依 CPI 成長，護欄不可將生活費砍到其下。熊市凍結核心 ETF 時，只有這一段必要支出可被迫出售核心 ETF。"
                       >
@@ -229,8 +274,9 @@
                       <button
                         class="help-tooltip"
                         type="button"
-                        aria-label="熊市下跌門檻說明：核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年度標記為凍結。必要生活費 Floor 與非計畫支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。"
-                        data-tooltip="核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為「凍結」——避免在低點賣出而把虧損鎖死。必要生活費 Floor 與非計畫支出無法調降，仍可突破門檻出售核心 ETF，並分別標記原因。"
+                        data-guide-topic="guide-提款與補水規則"
+                        aria-label="熊市下跌門檻說明：核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年度標記為凍結。必要生活費 Floor 與意外支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。"
+                        data-tooltip="核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為「凍結」——避免在低點賣出而把虧損鎖死。必要生活費 Floor 與意外支出無法調降，仍可突破門檻出售核心 ETF，並分別標記原因。"
                       >
                         ?
                       </button></span
@@ -246,6 +292,7 @@
                         <button
                           class="help-tooltip"
                           type="button"
+                          data-guide-topic="guide-提款與補水規則"
                           aria-label="提領護欄說明：年度支出成長一律以當年通膨為基準。提領率低於放寬觸發門檻時，成長為 CPI 加上放寬幅度；高於收緊觸發門檻時，成長為 CPI 減去收緊幅度；落在兩者之間時剛好跟上 CPI。提領率是當年支出除以年初總資產，低代表資產相對支出寬裕。幅度是實質的，因此同一組設定在任何通膨年代代表同一條規則。調整後不會越過另一個門檻，剛好落在門檻上不動作。"
                           data-tooltip="年度支出成長一律以當年通膨為基準：提領率 ＜ 放寬門檻 → CPI ＋ 放寬幅度；提領率 ＞ 收緊門檻 → CPI － 收緊幅度；落在中間 → 剛好跟上 CPI。提領率 = 當年支出 ÷ 年初總資產，低代表資產相對支出寬裕。幅度是實質的，同一組設定在任何通膨年代都代表同一條規則。調整後不會越過另一個門檻；剛好落在門檻上不動作。"
                         >
@@ -285,7 +332,7 @@
                     <ol id="planned-withdrawal-order"></ol>
                   </div>
                   <div class="withdrawal-order">
-                    <strong>非計畫支出順序</strong>
+                    <strong>意外支出順序</strong>
                     <small>可選方案或改為自訂順序。</small>
                     <div class="event-policy-buttons" id="event-policy-buttons">
                       <button data-event-policy="alpha">甲</button><button data-event-policy="beta">乙</button
@@ -392,6 +439,9 @@
             <div>
               <p class="eyebrow">MONTE CARLO</p>
               <h2>30 年隨機路徑壓力測試</h2>
+              <button type="button" class="text-button" data-guide-topic="guide-隨機模擬與抽樣">
+                多路徑模擬怎麼看？
+              </button>
             </div>
             <button class="primary" id="run-monte-carlo">執行模擬</button>
           </div>
@@ -601,6 +651,7 @@
     <script src="presentation.js"></script>
     <script src="fixed-comparison.js"></script>
     <script src="worker-client.js"></script>
+    <script src="beginner-guide.js"></script>
     <script src="app.js"></script>
     <script src="web-version.js"></script>
     <script src="pwa.js"></script>

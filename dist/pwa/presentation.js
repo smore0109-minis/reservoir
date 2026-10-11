@@ -49,10 +49,10 @@
     income: '現金流 ETF 本金',
   };
   const eventPolicyDescriptions = {
-    alpha: '甲：只動用緊急預備金；不足直接列為非計畫支出缺口。',
+    alpha: '甲：只動用緊急預備金；不足直接列為意外支出缺口。',
     beta: '乙：正報酬年先售核心 ETF；非正報酬年先售現金流 ETF 本金。',
     gamma: '丙：緊急預備金 → 國債到期現金 → 核心 ETF；不售現金流 ETF 本金。',
-    custom: '自訂：依下方手動排序支付非計畫支出。',
+    custom: '自訂：依下方手動排序支付意外支出。',
   };
   function incomeSchedule(sources) {
     const list = sources ?? [];
@@ -146,6 +146,9 @@
         : []),
       ['資產耗盡率', result.assetDepletionRate, `${HORIZON_YEARS} 年內資產歸零的路徑`],
       ['生活費曾缺口率', result.spendShortfallRate, '至少一年未完全支應生活費'],
+      ['意外支出曾缺口率', result.eventGapRate ?? 0, '完整 30 年；耗盡後已排定事件視為未支應'],
+      ['累計意外支出缺口 P50', result.cumulativeEventGap?.p50 ?? '', '僅曾有事件缺口路徑；名目金額'],
+      ['累計意外支出缺口 P75', result.cumulativeEventGap?.p75 ?? '', '僅曾有事件缺口路徑；名目金額'],
       ['年末資產 P25', result.finalAssets.p25, ''],
       ['年末資產 P50', result.finalAssets.p50, ''],
       ['年末資產 P75', result.finalAssets.p75, ''],
@@ -181,15 +184,15 @@
       '核心ETF凍結',
       '當年無可動用資金',
       '資產耗盡',
-      '非計畫支出',
-      '緊急金支應非計畫支出',
-      '國債到期現金支應非計畫支出',
-      '核心ETF支應非計畫支出',
-      '現金流ETF本金支應非計畫支出',
+      '意外支出',
+      '緊急金支應意外支出',
+      '國債到期現金支應意外支出',
+      '核心ETF支應意外支出',
+      '現金流ETF本金支應意外支出',
       '因事件被迫出售核心ETF',
       '核心ETF支應必要生活費',
       '因必要生活費被迫出售核心ETF',
-      '非計畫支出缺口',
+      '意外支出缺口',
       '調整前提領率',
       '護欄動作',
       '調整後提領率',
@@ -341,12 +344,12 @@
         '配息固定為第一順位',
       ],
       [
-        '非計畫支出策略',
+        '意外支出策略',
         { alpha: '方案甲', beta: '方案乙', gamma: '方案丙', custom: '自訂' }[state.eventWithdrawalPolicy],
         eventPolicyDescriptions[state.eventWithdrawalPolicy],
       ],
       [
-        '非計畫支出提款順序',
+        '意外支出提款順序',
         state.eventWithdrawalPolicy === 'custom'
           ? state.withdrawalOrders.event.map(id => withdrawalLabels[id]).join(' → ')
           : '依選定策略與當年核心報酬決定',
@@ -423,9 +426,9 @@
             : `固定 ${plan.treasury.length} 年梯`,
         ],
         ['生活費', '提款順序', plan.withdrawalOrders.planned.map(id => withdrawalLabels[id]).join(' → ')],
-        ['非計畫支出', '策略', eventPolicy],
+        ['意外支出', '策略', eventPolicy],
         [
-          '非計畫支出',
+          '意外支出',
           '提款順序',
           plan.eventWithdrawalPolicy === 'custom'
             ? plan.withdrawalOrders.event.map(id => withdrawalLabels[id]).join(' → ')
@@ -459,6 +462,9 @@
               '年末資產P25',
               '年末資產P50',
               '年末資產P75',
+              '意外支出曾缺口率',
+              '累計意外支出缺口P50（僅缺口路徑）',
+              '累計意外支出缺口P75（僅缺口路徑）',
             ],
             ...comparison.profiles.map(profile => {
               const paired = comparison.paired.find(item => item.id === profile.id);
@@ -473,10 +479,19 @@
                 r.finalAssets.p25,
                 r.finalAssets.p50,
                 r.finalAssets.p75,
+                r.eventGapRate ?? 0,
+                r.cumulativeEventGap?.p50 ?? '',
+                r.cumulativeEventGap?.p75 ?? '',
               ];
             }),
             [],
             ['方案設定快照', '類別', '項目', '值'],
+            [
+              '統計口徑',
+              '意外支出缺口',
+              '範圍',
+              '完整30年已抽定與確定事件；耗盡後未支應；缺口金額為名目值，不轉為負債或追繳',
+            ],
             ...comparison.profiles.flatMap(profile =>
               planRows(profile.plan).map(([category, item, value]) => [profile.name, category, item, value]),
             ),

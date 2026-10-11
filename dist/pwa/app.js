@@ -14,6 +14,7 @@
     historicalInflationPath,
     HORIZON_YEARS,
     simulate,
+    eventFundingSummary,
     coverageTargets,
     DIVIDEND_ETF_PROFILES,
     treasuryLadderLength,
@@ -60,10 +61,13 @@
   let monteCarloStale = false;
   let previousMonteCarloSeed = null;
   let annualSpendInputMode = 'annual';
+  const planSpendInputModes = new Map();
   let selectedPlanId = localStorage.getItem('retirement-selected-plan') || 'a';
   let fixedComparisonYear = 1;
   let fixedComparisonProfile = null;
   let fixedComparisonMetric = 'total';
+  let fixedDetailMode = 'year';
+  let fixedExpandedYear = null;
   let currentView = 'planner-view';
   const scenarioComparisonConfig = loadScenarioComparison();
   let scenarioComparisonYear = 1;
@@ -77,7 +81,42 @@
     ['emergency', 'defense', 'income', 'growth'].includes(bucket.id) ? `var(--bucket-${bucket.id})` : bucket.color;
   let currentLanguage = localStorage.getItem('retirement-language') === 'en' ? 'en' : 'zh';
   const $ = s => document.querySelector(s);
+  let guideReturnFocus = null;
+  let guideFocusFrame = null;
   const englishText = {
+    入門指南: 'Beginner guide',
+    入門與名詞指南: 'Beginner guide',
+    關閉指南: 'Close guide',
+    關閉: 'Close',
+    搜尋指南: 'Search guide',
+    '例如：Floor、配息、P50、護欄': 'For example: Floor, distributions, P50, guardrails',
+    完整指南目前提供繁體中文內容: 'The complete guide is currently available in Traditional Chinese.',
+    指南目錄: 'Guide contents',
+    '第一次使用：五步完成': 'First run: five steps',
+    設定資產與生活費: 'Set assets and spending',
+    設定必要生活費: 'Set essential spending',
+    確認四個水庫: 'Review the four reservoirs',
+    查看固定情境: 'Review a fixed scenario',
+    執行多路徑模擬: 'Run Monte Carlo',
+    '找不到相符內容，請換一個關鍵詞。': 'No matching content. Try another search term.',
+    '如何解讀結果？': 'How should I read these results?',
+    '多路徑模擬怎麼看？': 'How does Monte Carlo work?',
+    明細檢視: 'Detail view',
+    單一年度: 'Single year',
+    完整年度列表: 'Full annual list',
+    首次意外支出缺口: 'First unexpected-expense gap',
+    意外支出: 'Unexpected expenses',
+    意外支出已支應: 'Unexpected expenses paid',
+    意外支出缺口: 'Unexpected-expense gap',
+    意外支出曾缺口率: 'Unexpected-expense gap rate',
+    '累計意外支出缺口 P50 / P75': 'Cumulative unexpected-expense gap P50 / P75',
+    '僅計入曾有意外支出缺口的路徑；名目金額。': 'Only paths with unexpected-expense gaps; nominal amounts.',
+    '涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。':
+      'Includes sampled and scheduled events over all 30 years; events after depletion are unpaid, without extending the simulation. Gaps do not become debt or later repayments.',
+    '年度列表止於資產耗盡；未模擬年份顯示已停止，不補零。':
+      'Annual results stop at depletion; unmodeled years are marked stopped, not zero-filled.',
+    耗盡後意外支出缺口: 'Unexpected-expense gaps after depletion',
+    耗盡後另有排定意外支出未列入: 'Scheduled unexpected expenses after depletion (not included)',
     情境比較: 'Scenario comparison',
     必要生活費缺口: 'Essential spending gap',
     '固定計畫，比較不同市場的歷史路徑；此頁選擇獨立保存。':
@@ -366,7 +405,7 @@
     '核心 ETF': 'Core ETF',
     '現金流 ETF 本金': 'Cash-flow ETF principal',
     生活費提款順序: 'Spending withdrawal order',
-    非計畫支出順序: 'Unexpected-spending order',
+    意外支出順序: 'Unexpected-spending order',
     防守安全水庫: 'Defense bucket',
     國債梯: 'Treasury ladder',
     '使用我的計畫，檢查指定假設下的 30 年資產與生活費。固定情境的逐年覆寫不帶入多路徑模擬。':
@@ -380,12 +419,12 @@
     '目前測試：MC 方案 A': 'Current test: MC Plan A',
     '基準情境：長期平均市場環境；以收入水庫和分層提領維持支出。':
       'Base scenario: long-term average market environment; use the income bucket and layered withdrawals to maintain spending.',
-    '必要生活費與非計畫支出可突破熊市提款門檻；可調整生活費受門檻限制。':
-      'Necessary spending and unexpected spending can exceed the bear-market withdrawal threshold; adjustable spending is subject to the threshold.',
+    '必要生活費與意外支出可突破熊市提款門檻；可調整生活費受門檻限制。':
+      'Necessary spending and unexpected expenses can exceed the bear-market withdrawal threshold; adjustable spending is subject to the threshold.',
     '丙：緊急預備金 → 國債到期現金 → 核心 ETF；不售現金流 ETF 本金。':
       'Gamma: Emergency reserve → Treasury maturity cash → Core ETF; do not sell cash-flow ETF principal.',
-    '可逐年設定非計畫支出與核心報酬；可同時展開多個年末資產查看水庫明細':
-      'Set unexpected spending and core returns by year; expand multiple year-end asset rows to view bucket details.',
+    '可逐年設定意外支出與核心報酬；可同時展開多個年末資產查看水庫明細':
+      'Set unexpected expenses and core returns by year; expand multiple year-end asset rows to view bucket details.',
     '支應比例只調整未來補水目標。初始金額可直接修改，或預覽後套用目標配置。':
       'Coverage ratios only adjust future replenishment targets. Initial amounts can be edited directly, or previewed and applied as target allocation.',
     '緊急金 + 防守水庫': 'Emergency cash + defense bucket',
@@ -441,8 +480,8 @@
     不比較此方案: 'Exclude this plan',
     '不比較方案 A': 'Exclude Plan A',
     'Independent Comparison Plans儲存位置': 'Independent comparison plan storage location',
-    '核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為凍結。必要生活費 Floor 與非計畫支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。':
-      'When the Core ETF return is below this value, stop selling it for adjustable spending and mark the year as frozen. Necessary spending and unexpected spending are not protected by this threshold and may still force a Core ETF sale; the reasons are reported separately.',
+    '核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為凍結。必要生活費 Floor 與意外支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。':
+      'When the Core ETF return is below this value, stop selling it for adjustable spending and mark the year as frozen. Necessary spending and unexpected expenses are not protected by this threshold and may still force a Core ETF sale; the reasons are reported separately.',
     '已知一定會發生的一次性支出（例如第 7 年修房子）。每條路徑都在同一年付同一筆錢，看它落在不同市場路徑上的結果分佈。金額以第 1 年美元輸入、依年通膨調整；與抽樣事件同年時相加。比較模式下所有方案共用。留空或金額 0 表示不使用。':
       'A known one-time expense (for example, a home repair in Year 7). Every path pays the same amount in the same year, showing how it falls across market paths. Enter the amount in Year 1 dollars and adjust it by annual inflation; add it to sampled events in the same year. Shared by all plans in comparison mode. Blank or amount 0 means unused.',
     '單次事件以第 1 年美元計的金額。每一年會依累積通膨調整：第 N 年命中時，金額等於基準值 × (1 + 年通膨率)^(N−1)。是否發生則由年度意外支出機率獨立抽樣。':
@@ -459,13 +498,12 @@
     隨通膨: 'Inflation-linked',
     固定名目: 'Nominal fixed',
     '生活費本金提款順序（配息優先）': 'Spending principal withdrawal order (dividends first)',
-    非計畫支出: 'Unexpected spending',
     提款策略: 'Withdrawal strategy',
     方案甲: 'Alpha plan',
     方案乙: 'Beta plan',
     方案丙: 'Gamma plan',
-    '自訂：依下方手動排序支付非計畫支出。': 'Custom: pay unexpected spending using the manual order below.',
-    非計畫支出自訂提款順序: 'Custom unexpected-spending withdrawal order',
+    '自訂：依下方手動排序支付意外支出。': 'Custom: pay unexpected expenses using the manual order below.',
+    意外支出自訂提款順序: 'Custom unexpected-spending withdrawal order',
     '核心 ETF 自動補足差額；其他水庫超過總額時，鎖定總額會提高。':
       'Core ETF fills the difference automatically; if other buckets exceed the total, the locked total increases.',
     'VYM／SCHD 使用 DPS／NAV 部分調整模型；legacy 配息率不參與運算。補水使用下一年 DPS。':
@@ -490,7 +528,7 @@
     ['每年生活費支應目標', 'Annual spending coverage target'],
     ['的年度生活費', 'of annual spending'],
     ['長期平均市場環境', 'long-term average market environment'],
-    ['必要生活費與非計畫支出', 'Necessary spending and unexpected spending'],
+    ['必要生活費與意外支出', 'Necessary spending and unexpected expenses'],
     ['座水庫啟用', 'buckets active'],
     ['參考初始金額', 'Reference initial amount'],
     ['季度股利', 'quarterly dividends'],
@@ -556,7 +594,7 @@
     ['金融危機', 'Financial crisis'],
     ['東日本大震災', 'Great East Japan Earthquake'],
     ['生活費先使用配息', 'Use dividends for spending first'],
-    ['非計畫支出：', 'Unexpected spending: '],
+    ['意外支出：', 'Unexpected expenses: '],
     ['補水目標：', 'Replenishment target: '],
     ['初始 $0 水庫不主動補水', 'buckets initially at $0 are not replenished proactively'],
     ['首年為輸入值，不套用通膨', 'First year uses the input value; inflation is not applied'],
@@ -753,8 +791,8 @@
     ['突發支出與即時流動性', 'Unexpected expenses & immediate liquidity'],
     ['基準情境：', 'Base scenario: '],
     [
-      '必要生活費與非計畫支出可突破熊市提款門檻；可調整生活費受門檻限制。',
-      'Necessary spending and unexpected spending can exceed the bear-market withdrawal threshold; adjustable spending is subject to the threshold.',
+      '必要生活費與意外支出可突破熊市提款門檻；可調整生活費受門檻限制。',
+      'Necessary spending and unexpected expenses can exceed the bear-market withdrawal threshold; adjustable spending is subject to the threshold.',
     ],
     ['生活費先使用配息，其餘按', 'Use dividends for spending first; the remainder uses '],
     ['到期現金', 'maturity cash'],
@@ -762,8 +800,8 @@
     ['熊市', 'bear market'],
     ['受門檻限制', 'is subject to the threshold'],
     [
-      '可逐年設定非計畫支出與核心報酬；可同時展開多個年末資產查看水庫明細',
-      'Set unexpected spending and core returns by year; expand multiple year-end asset rows to view bucket details.',
+      '可逐年設定意外支出與核心報酬；可同時展開多個年末資產查看水庫明細',
+      'Set unexpected expenses and core returns by year; expand multiple year-end asset rows to view bucket details.',
     ],
     ['年末資產', 'year-end assets'],
     ['查看水庫明細', 'view bucket details'],
@@ -846,7 +884,7 @@
     ['方案Beta', 'Beta plan'],
     ['方案Gamma', 'Gamma plan'],
     ['bear market不賣核心threshold %', 'Bear-market threshold for not selling Core ETF %'],
-    ['非Planned spending策略', 'Unexpected spending strategy'],
+    ['非Planned spending策略', 'Unexpected-expense strategy'],
     ['Custom收益型／legacy', 'Custom income / legacy'],
     ['Legacy 基準dividends率 %', 'Legacy baseline dividend rate %'],
     ['PBP（可變配發）', 'PBP (variable distributions)'],
@@ -934,7 +972,7 @@
     ['核心 ETF 以外的水庫報酬沿用', 'Bucket returns outside the Core ETF use'],
     ['護欄砍出來的節省不算成功', 'savings from guardrail cuts do not count as success'],
     ['30 年核心報酬', '30-year core returns'],
-    ['意外支出', 'unexpected spending'],
+    ['意外支出', 'unexpected expenses'],
     ['BXM 路徑另帶', 'BXM paths also include'],
     ['月頻市場', 'monthly market'],
     ['水庫模擬頁', 'bucket simulation page'],
@@ -947,7 +985,7 @@
     ['return的結果', 'return result'],
     ['結果', 'result'],
     ['假設', 'assumptions'],
-    ['意外支出與非核心情境', 'unexpected spending and the non-core scenario'],
+    ['意外支出與非核心情境', 'unexpected expenses and the non-core scenario'],
     [
       '另帶月頻市場與專屬殘差以確保可重播',
       'also includes monthly market data and dedicated residuals for exact replay',
@@ -1021,9 +1059,9 @@
     '只調整未來補水目標，不移動初始本金；兩個目標合計不能超過 100%。':
       'Changes only future replenishment targets; initial balances stay unchanged. The two targets must total no more than 100%.',
     '核心增值 ETF 策略': 'Core growth ETF strategy',
-    '熊市下跌門檻說明：核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年度標記為凍結。必要生活費 Floor 與非計畫支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。':
+    '熊市下跌門檻說明：核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年度標記為凍結。必要生活費 Floor 與意外支出不受此門檻保護，仍可被迫出售核心 ETF，並分別標記原因。':
       'Bear-market sale restriction: When the core ETF annual return falls below this threshold, sales for discretionary spending are suspended. Essential spending and unexpected expenses can still require core ETF sales; the reason is shown separately.',
-    '核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為「凍結」——避免在低點賣出而把虧損鎖死。必要生活費 Floor 與非計畫支出無法調降，仍可突破門檻出售核心 ETF，並分別標記原因。':
+    '核心 ETF 當年報酬低於此值時，停止為可調整生活費出售核心 ETF，該年標記為「凍結」——避免在低點賣出而把虧損鎖死。必要生活費 Floor 與意外支出無法調降，仍可突破門檻出售核心 ETF，並分別標記原因。':
       'When the core ETF annual return is below this threshold, sales for discretionary spending are suspended to avoid realizing losses at depressed prices. Essential spending and unexpected expenses can still require core ETF sales; the reason is shown separately.',
     終身: 'Lifetime',
     '歷史區塊抽樣時，在每個保留年度報酬上加入最多 ±X% 的獨立隨機擾動；0% 表示完全使用原始年度資料。它只改變該年度報酬，不改變區塊順序或通膨路徑。':
@@ -1043,7 +1081,7 @@
       'Bull market: replay the actual 1996–1999 dot-com boom returns, then revert to the long-term average.',
     '每個水庫均以「期初 ＋ 報酬 ＋ 流入 − 流出 ＝ 期末」對帳；國債到期本金只是在國債面額與防守現金間轉換。':
       'Each bucket reconciles as opening balance + investment return + inflows − outflows = closing balance. Treasury principal received at maturity moves from bond face value to cash within the Treasury bucket.',
-    '熊市門檻擋的是可調整生活費；必要生活費與非計畫支出無法調降，兩者都可突破門檻出售核心 ETF，並分別標記原因。':
+    '熊市門檻擋的是可調整生活費；必要生活費與意外支出無法調降，兩者都可突破門檻出售核心 ETF，並分別標記原因。':
       'The bear-market restriction applies to discretionary spending. Essential spending and unexpected expenses can still require core ETF sales; each reason is shown separately.',
     '熊市：回放 2000–2002 泡沫破裂與 2003–2004 的實際反彈，其後回到長期平均；核心資產避免在低點出售。':
       'Bear market: replay the 2000–2002 decline and the 2003–2004 recovery, then revert to the long-term average. The core ETF sale restriction limits sales at depressed prices.',
@@ -1054,11 +1092,11 @@
     '依首年生活費與參考配發率估算，未來配息不保證達標。套用後的初始配置：':
       'Estimated from first-year spending and the reference distribution rate; future distributions are not guaranteed. Proposed initial allocation:',
     套用初始配置: 'Apply Initial Allocation',
-    '甲：只動用緊急預備金；不足直接列為非計畫支出缺口。':
+    '甲：只動用緊急預備金；不足直接列為意外支出缺口。':
       'Alpha: use only the emergency reserve; any remaining expense is recorded as an unexpected-expense shortfall.',
     '乙：正報酬年先售核心 ETF；非正報酬年先售現金流 ETF 本金。':
       'Beta: sell the core ETF first in positive-return years; otherwise sell income ETF holdings first.',
-    非計畫支出提款順序: 'Unexpected-expense withdrawal order',
+    意外支出提款順序: 'Unexpected-expense withdrawal order',
     '模擬中…可繼續操作，修改方案或抽樣設定會取消本次計算。':
       'Simulation running… You can continue using the app. Editing an MC plan or sampling assumptions cancels this run.',
     '本次模擬路徑數，非未來發生機率保證': 'Counts from this simulation, not guaranteed future probabilities',
@@ -1113,9 +1151,9 @@
       'Income ETF distributions are used first; the remaining withdrawal sources can be reordered.',
     '壓力：1966 年起美國 CPI（70 年代完整一輪）': 'Stress: U.S. CPI from 1966 (full 1970s cycle)',
     '壓力：1973 年起美國 CPI（石油危機起）': 'Stress: U.S. CPI from 1973 (oil crisis onward)',
-    非計畫支出策略: 'Unexpected-expense strategy',
-    非計畫支出順序: 'Unexpected-expense withdrawal order',
-    非計畫支出自訂提款順序: 'Custom unexpected-expense withdrawal order',
+    意外支出策略: 'Unexpected-expense strategy',
+    意外支出順序: 'Unexpected-expense withdrawal order',
+    意外支出自訂提款順序: 'Custom unexpected-expense withdrawal order',
     '年收入 $（第 1 年幣值）': 'Annual income $ (Year 1 dollars)',
     '年金額（第 1 年幣值）': 'Annual amount (Year 1 dollars)',
     隨機: 'Random',
@@ -1163,7 +1201,7 @@
     清算轉出至緊急預備金: 'Liquidation proceeds transferred to the emergency reserve',
     '清算轉出至核心 ETF': 'Liquidation proceeds transferred to the core ETF',
     本金支應生活費: 'Holdings sold to fund spending',
-    '非計畫支出（本金）': 'Holdings sold for unexpected expenses',
+    '意外支出（本金）': 'Holdings sold for unexpected expenses',
     到期現金補緊急金: 'Maturity proceeds replenish the emergency reserve',
     防守現金回收至核心: 'Treasury bucket surplus transferred to the core ETF',
     防守現金回收: 'Treasury bucket surplus',
@@ -1175,7 +1213,7 @@
     '防守安全水庫 · 美國國債梯': 'Treasury Bucket · U.S. Treasury Ladder',
     配息支應生活費: 'Distributions fund spending',
     '（超過原鎖定總額，總額將提高）': '(exceeds the locked total; the total will increase)',
-    '自訂：依下方手動排序支付非計畫支出。': 'Custom: fund unexpected expenses in the order below.',
+    '自訂：依下方手動排序支付意外支出。': 'Custom: fund unexpected expenses in the order below.',
     '單方案使用 MC 方案 A；固定情境不會自動同步，需明確複製到 A／B／C。':
       'Single-plan mode uses independent MC Plan A. Changes to the fixed scenario do not update MC plans automatically; use the explicit copy action to update A, B, or C.',
     '目前使用 MC ': 'Currently using MC ',
@@ -1280,7 +1318,7 @@
         /國債梯與現金流 ETF 的生活費支應目標合計 ([\d.]+)%（([\d.]+)% \+ ([\d.]+)%），超過 100%。兩者會各自依比例補水；若是先前只啟用其中一個水庫時留下的設定，請確認。/g,
         'Treasury and income ETF spending coverage targets total $1% ($2% + $3%), exceeding 100%. Each bucket is replenished to its own target. Review these settings, especially if they were saved when only one bucket was active.',
       )
-      .replace(/自訂：依下方手動排序支付非計畫支出。/g, 'Custom: fund unexpected expenses in the order below. ')
+      .replace(/自訂：依下方手動排序支付意外支出。/g, 'Custom: fund unexpected expenses in the order below. ')
       .replace(/減配較深（壓力）/g, 'Deeper Distribution Cuts (Stress)')
       .replace(/恢復較慢（壓力）/g, 'Slower Recovery (Stress)')
       .replace(
@@ -1318,7 +1356,7 @@
         'Distributions fund spending first; the remainder follows this withdrawal order: $1. ',
       )
       .replace(
-        /必要生活費與非計畫支出可突破熊市提款門檻；可調整生活費受門檻限制。/g,
+        /必要生活費與意外支出可突破熊市提款門檻；可調整生活費受門檻限制。/g,
         'Essential spending and unexpected expenses can require core ETF sales below the bear-market threshold; discretionary spending remains subject to the restriction. ',
       )
       .replace(
@@ -1486,8 +1524,8 @@
       .replace(/總額：/g, 'Total: ')
       .replace(/不比較 /g, 'Exclude ')
       .replace(/熊市被迫出售/g, 'forced sale below the bear-market threshold')
-      .replace(/非計畫支出曾有缺口/g, 'An unexpected-expense shortfall occurred')
-      .replace(/非計畫支出/g, 'Unexpected expenses')
+      .replace(/意外支出曾有缺口/g, 'An unexpected-expense shortfall occurred')
+      .replace(/意外支出/g, 'Unexpected expenses')
       .replace(/（第 1 年幣值）/g, '(Year 1 dollars)')
       .replace(
         /VYM／SCHD 使用 DPS／NAV 部分調整模型；legacy 配息率不參與運算。補水使用下一年 DPS。/g,
@@ -1620,7 +1658,7 @@
       .replaceAll('return的result', 'return result')
       .replaceAll('因此', 'therefore ')
       .replaceAll('equalFixed', 'equal the fixed ')
-      .replaceAll('意外支出', 'unexpected spending')
+      .replaceAll('意外支出', 'unexpected expenses')
       .replaceAll('的假設', 'assumptions')
       .replaceAll('的assumptions', 'assumptions')
       .replaceAll('護欄', 'guardrails')
@@ -1811,7 +1849,7 @@
       'Years to shorten the ladder to 1 year (0 = off)',
     );
     translated = translated.replace(/第\s*(\d+)\s*順位/g, 'Priority $1');
-    translated = translated.replace(/非Planned spending策略/g, 'Unexpected spending strategy');
+    translated = translated.replace(/非Planned spending策略/g, 'Unexpected-expense strategy');
     translated = translated.replace(/方案(Alpha|Beta|Gamma)/g, '$1 plan');
     translated = translated.replace(/／年/g, ' / year');
     translated = translated.replace(
@@ -1942,10 +1980,7 @@
       node.__localizedText = translated;
     }
     // Scoped calls must include the root itself: an attribute mutation targets that element.
-    const withinRoot = selector => [
-      ...(root.matches?.(selector) ? [root] : []),
-      ...root.querySelectorAll(selector),
-    ];
+    const withinRoot = selector => [...(root.matches?.(selector) ? [root] : []), ...root.querySelectorAll(selector)];
     withinRoot('[aria-label], [title], [placeholder], [data-tooltip]').forEach(element => {
       for (const attribute of ['aria-label', 'title', 'placeholder', 'data-tooltip']) {
         if (!element.hasAttribute(attribute)) continue;
@@ -1985,6 +2020,85 @@
     const languageToggle = $('#language-toggle');
     if (languageToggle && languageToggle.textContent !== (currentLanguage === 'en' ? '中文' : 'English'))
       languageToggle.textContent = currentLanguage === 'en' ? '中文' : 'English';
+    const guideLanguageNote = $('#guide-language-note');
+    if (guideLanguageNote) guideLanguageNote.hidden = currentLanguage !== 'en';
+  }
+
+  function initializeGuide() {
+    const guide = window.RetirementGuide;
+    if (!guide?.html || !Array.isArray(guide.sections)) return;
+    $('#guide-content').innerHTML = guide.html;
+    $('#guide-toc').innerHTML = guide.sections
+      .map(
+        section =>
+          `<button type="button" data-guide-topic="${escapeHtml(section.id)}">${escapeHtml(section.title)}</button>`,
+      )
+      .join('');
+  }
+
+  function filterGuide(query = '') {
+    const normalized = query.trim().toLocaleLowerCase('zh-Hant');
+    let matches = 0;
+    document.querySelectorAll('[data-guide-section]').forEach(section => {
+      const visible = !normalized || section.textContent.toLocaleLowerCase('zh-Hant').includes(normalized);
+      section.hidden = !visible;
+      if (visible) matches += 1;
+      const tocButton = $(`#guide-toc [data-guide-topic="${section.id}"]`);
+      if (tocButton) tocButton.hidden = !visible;
+    });
+    $('#guide-empty').hidden = matches > 0;
+  }
+
+  function openGuide(topic = null, opener = document.activeElement) {
+    const drawer = $('#guide-drawer');
+    const backdrop = $('#guide-backdrop');
+    if (!drawer || !backdrop) return;
+    if (drawer.hidden) guideReturnFocus = opener instanceof HTMLElement ? opener : null;
+    drawer.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('guide-open');
+    localStorage.setItem('retirement-guide-seen', 'true');
+    if (topic) {
+      $('#guide-search').value = '';
+      filterGuide();
+      guideFocusFrame = requestAnimationFrame(() => {
+        guideFocusFrame = null;
+        document.getElementById(topic)?.scrollIntoView?.({ block: 'start' });
+        drawer.focus({ preventScroll: true });
+      });
+    } else
+      guideFocusFrame = requestAnimationFrame(() => {
+        guideFocusFrame = null;
+        $('#guide-search').focus();
+      });
+  }
+
+  function closeGuide({ restoreFocus = true } = {}) {
+    if (guideFocusFrame !== null) cancelAnimationFrame(guideFocusFrame);
+    guideFocusFrame = null;
+    $('#guide-drawer').hidden = true;
+    $('#guide-backdrop').hidden = true;
+    document.body.classList.remove('guide-open');
+    if (restoreFocus) guideReturnFocus?.focus?.();
+    guideReturnFocus = null;
+  }
+
+  function openGuideStep(button) {
+    const view = button.dataset.guideView;
+    closeGuide({ restoreFocus: false });
+    setActiveView(view);
+    if (view === 'plans-view') {
+      const card = document.querySelector(`[data-plan-card="${selectedPlanId}"]`);
+      if (card) card.open = true;
+      const target =
+        button.dataset.guideTarget === 'buckets'
+          ? document.querySelector(`[data-plan-bucket][data-profile="${selectedPlanId}"]`)
+          : document.querySelector(
+              `[data-plan-field="${button.dataset.guideTarget}"][data-profile="${selectedPlanId}"]`,
+            );
+      target?.scrollIntoView?.({ block: 'center' });
+      target?.focus?.();
+    } else document.querySelector(`#${view}`)?.scrollIntoView?.({ block: 'start' });
   }
   // 切換情境要同時動四件事：模組變數、持久化狀態、頁籤樣式、歷史面板顯示。原本散在五個呼叫點
   // 各自處理，於是「重開後固定回到 base」這種漏掉其中一項的組合沒有人發現。集中成單一入口。
@@ -2909,7 +3023,7 @@
   // 熊市門檻仍保護可調整生活費；事件與必要帳單都有突破門檻的理由。年度明細必須說明是哪一條
   // 資金鏈賣了核心 ETF，否則使用者會把「守住必要帳單」誤讀成規則偷偷失效。
   const THRESHOLD_ASYMMETRY_NOTE = html(
-    '熊市門檻擋的是可調整生活費；必要生活費與非計畫支出無法調降，',
+    '熊市門檻擋的是可調整生活費；必要生活費與意外支出無法調降，',
     '兩者都可突破門檻出售核心 ETF，並分別標記原因。',
   );
   function renderReturnOptions(year) {
@@ -2990,7 +3104,7 @@
   function yearEventNote(y) {
     if (!y.eventSpend) return '';
     return html(
-      `非計畫支出 ${money(y.eventSpend)}：緊急預備金 ${money(y.eventEmergencyTake)}`,
+      `意外支出 ${money(y.eventSpend)}：緊急預備金 ${money(y.eventEmergencyTake)}`,
       y.eventDefenseTake ? `；國債到期現金 ${money(y.eventDefenseTake)}` : '',
       y.eventGrowthTake ? `；核心 ETF ${money(y.eventGrowthTake)}` : '',
       y.eventIncomeTake ? `；現金流 ETF 本金 ${money(y.eventIncomeTake)}` : '',
@@ -3071,24 +3185,24 @@
       add(inflows, '國債到期現金補入', y.treasuryCashToEmergency);
       add(inflows, '核心 ETF 補水', Math.max(0, y.emergencyTransfer));
       add(outflows, '生活費支應', planned);
-      add(outflows, '非計畫支出', y.eventEmergencyTake);
+      add(outflows, '意外支出', y.eventEmergencyTake);
       add(outflows, '回收至核心 ETF', Math.max(0, -y.emergencyTransfer));
     } else if (id === 'defense') {
       add(inflows, '核心 ETF 補國債梯', y.ladderTransfer);
       add(outflows, '生活費支應', planned);
-      add(outflows, '非計畫支出', y.eventDefenseTake);
+      add(outflows, '意外支出', y.eventDefenseTake);
       add(outflows, '到期現金補緊急金', y.treasuryCashToEmergency);
       add(outflows, '防守現金回收至核心', y.treasuryCashRecovery);
     } else if (id === 'income') {
       add(inflows, '核心 ETF 補入', y.incomeTransfer);
       add(outflows, '配息支應生活費', y.sources?.income);
       add(outflows, '本金支應生活費', y.sources?.incomePrincipal);
-      add(outflows, '非計畫支出（本金）', y.eventIncomeTake);
+      add(outflows, '意外支出（本金）', y.eventIncomeTake);
     } else if (id === 'growth') {
       add(inflows, '防守現金回收', y.treasuryCashRecovery);
       add(inflows, '緊急金回收', Math.max(0, -y.emergencyTransfer));
       add(outflows, '生活費支應', planned);
-      add(outflows, '非計畫支出', y.eventGrowthTake);
+      add(outflows, '意外支出', y.eventGrowthTake);
       add(outflows, '補緊急預備金', Math.max(0, y.emergencyTransfer));
       add(outflows, '補國債梯', y.ladderTransfer);
       add(outflows, '補現金流 ETF', y.incomeTransfer);
@@ -3131,7 +3245,8 @@
       '</article>',
     );
   }
-  function yearDetailRow(y, bucketById, plan = state) {
+  // colspan 由呼叫端依所在表格欄數指定；預設 6 是逐年軌跡表的欄數。
+  function yearDetailRow(y, bucketById, plan = state, colspan = 6) {
     const details = plan.buckets.map(bucket => yearBucketLedger(y, bucket)).join('');
     const { emergencyNote, ladderNote, incomeNote, treasuryRecoveryNote, emergencyRule } = yearReplenishNotes(
       y,
@@ -3148,7 +3263,7 @@
         ? `<small class="threshold-note">${THRESHOLD_ASYMMETRY_NOTE}</small>`
         : '';
     return html(
-      '<tr class="detail-row"><td colspan="6"><div class="reservoir-details">',
+      `<tr class="detail-row"><td colspan="${colspan}"><div class="reservoir-details">`,
       `<div class="detail-title">第 ${y.year} 年末水庫明細 <small>相對該年年初的變化</small>`,
       '<small class="ledger-intro">每個水庫均以「期初 ＋ 報酬 ＋ 流入 − 流出 ＝ 期末」對帳；國債到期本金只是在國債面額與防守現金間轉換。</small>',
       `<small class="income-model-note">現金流水庫：含息總報酬 ${y.incomeReturn >= 0 ? '+' : ''}${percent(y.incomeReturn)}，`,
@@ -3504,7 +3619,9 @@
         '>名目資產</option></select></label></div>',
       '<div class="chart-legend">' +
         results
-          .map((item, index) => '<span><i style="background:' + colors[index] + '"></i>' + label(item.config) + '</span>')
+          .map(
+            (item, index) => '<span><i style="background:' + colors[index] + '"></i>' + label(item.config) + '</span>',
+          )
           .join('') +
         '</div>',
       '<svg id="scenario-compare-svg" viewBox="0 0 ' +
@@ -3732,6 +3849,99 @@
     applyLanguage(root);
     if (focusedId) document.getElementById(focusedId)?.focus();
   }
+  // 固定情境止於耗盡年份，里程碑只看已模擬年份；MC 則把耗盡後的排定事件列為未支應。
+  // 兩者不一致時在卡片上明示金額，避免誤以為沒有意外支出缺口。
+  function eventsAfterDepletionNote(profile) {
+    if (!profile.result.bankruptYear) return '';
+    const after = eventFundingSummary(profile.result, profile.plan.emergencyEvents)
+      .annual.filter(row => row.stopped)
+      .reduce((sum, row) => sum + row.planned, 0);
+    return after > 1
+      ? `<small class="fixed-milestone-note"><span>耗盡後另有排定意外支出未列入</span> ${money(after)}</small>`
+      : '';
+  }
+  function comparisonEventGapTable(comparison) {
+    if (comparison.profiles.every(profile => profile.result.eventsModeled === false)) return '';
+    return (
+      '<div class="table-wrap comparison-event-gaps"><table><thead><tr><th>方案</th><th>意外支出曾缺口率</th><th>累計意外支出缺口 P50 / P75</th></tr></thead><tbody>' +
+      comparison.profiles
+        .map(
+          profile =>
+            '<tr><th>' +
+            nameHtml(profile.name) +
+            '</th><td>' +
+            percent((profile.result.eventGapRate ?? 0) * 100) +
+            '</td><td>' +
+            (profile.result.cumulativeEventGap
+              ? money(profile.result.cumulativeEventGap.p50) + ' / ' + money(profile.result.cumulativeEventGap.p75)
+              : '—') +
+            '</td></tr>',
+        )
+        .join('') +
+      '</tbody></table></div><p class="hint">僅計入曾有意外支出缺口的路徑；名目金額。</p><p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>'
+    );
+  }
+  function eventGapMetrics(result) {
+    // 沒有任何路徑出現意外支出（機率或金額為 0、也沒有指定事件）時，0% 與「—」只會佔用摘要版面。
+    if (result.eventsModeled === false) return '';
+    return (
+      '<div class="monte-carlo-metrics event-gap-metrics"><div><small>意外支出曾缺口率</small><strong>' +
+      percent((result.eventGapRate ?? 0) * 100) +
+      '</strong></div><div><small>累計意外支出缺口 P50 / P75</small><strong>' +
+      (result.cumulativeEventGap
+        ? money(result.cumulativeEventGap.p50) + ' / ' + money(result.cumulativeEventGap.p75)
+        : '—') +
+      '</strong><span>僅計入曾有意外支出缺口的路徑；名目金額。</span></div></div><p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>'
+    );
+  }
+  function renderFixedAnnualList(profile) {
+    const buckets = Object.fromEntries(profile.plan.buckets.map(bucket => [bucket.id, bucket]));
+    return (
+      '<p class="hint">年度列表止於資產耗盡；未模擬年份顯示已停止，不補零。</p><div class="table-wrap fixed-plan-annual"><table><thead><tr>' +
+      [
+        '年度',
+        '生活費目標',
+        '實際生活費',
+        '生活費缺口',
+        '必要生活費缺口',
+        '意外支出',
+        '意外支出已支應',
+        '意外支出缺口',
+        '年末總資產',
+      ]
+        .map(label => '<th>' + label + '</th>')
+        .join('') +
+      '</tr></thead><tbody>' +
+      Array.from({ length: HORIZON_YEARS }, (_, index) => {
+        const year = profile.result.years[index];
+        if (!year) return '<tr><th>' + fixedYearLabel(index + 1) + '</th><td colspan="8">已停止</td></tr>';
+        return (
+          '<tr><th><button type="button" class="ghost" data-fixed-expand="' +
+          year.year +
+          '" aria-expanded="' +
+          (fixedExpandedYear === year.year) +
+          '">' +
+          fixedYearLabel(year.year) +
+          '</button></th>' +
+          [
+            year.spend,
+            year.actualSpend,
+            year.unmetSpend,
+            year.floorGap,
+            year.eventSpend,
+            year.eventSpend - year.eventUnmet,
+            year.eventUnmet,
+            year.total,
+          ]
+            .map(value => '<td>' + money(value) + '</td>')
+            .join('') +
+          '</tr>' +
+          (fixedExpandedYear === year.year ? yearDetailRow(year, buckets, profile.plan, 9) : '')
+        );
+      }).join('') +
+      '</tbody></table></div>'
+    );
+  }
   function renderFixedComparison() {
     const profiles = window.RetirementFixedComparison.compareFixedPlans(state, currentScenario);
     const root = $('#scenario-content');
@@ -3742,7 +3952,12 @@
       return;
     }
     if (!profiles.some(profile => profile.id === fixedComparisonProfile)) fixedComparisonProfile = profiles[0].id;
-    const metrics = { total: '年末總資產', actualSpend: '實際生活費', unmetSpend: '生活費缺口' };
+    const metrics = {
+      total: '年末總資產',
+      actualSpend: '實際生活費',
+      unmetSpend: '生活費缺口',
+      eventUnmet: '意外支出缺口',
+    };
     const colors = seriesColors;
     const maximum = Math.max(
       1,
@@ -3796,7 +4011,7 @@
       profiles
         .map(
           profile =>
-            `<article><strong>${nameHtml(profile.name)}</strong>${milestone(profile, '首次出售核心 ETF（含補水）', profile.firstCoreSale)}${milestone(profile, '首次必要生活費缺口', profile.result.firstFloorGapYear)}${milestone(profile, '資產耗盡年份', profile.result.bankruptYear)}</article>`,
+            `<article><strong>${nameHtml(profile.name)}</strong>${milestone(profile, '首次出售核心 ETF（含補水）', profile.firstCoreSale)}${milestone(profile, '首次必要生活費缺口', profile.result.firstFloorGapYear)}${milestone(profile, '首次意外支出缺口', profile.result.firstEventShortfallYear)}${milestone(profile, '資產耗盡年份', profile.result.bankruptYear)}${eventsAfterDepletionNote(profile)}</article>`,
         )
         .join(''),
       '</div>',
@@ -3829,7 +4044,9 @@
       const year = profile.result.years.find(item => item.year === fixedComparisonYear);
       const host = $('#fixed-year-detail');
       host.innerHTML = html(
-        '<h3>年度水庫明細</h3><div class="fixed-detail-controls"><label>年度 <select id="fixed-detail-year">',
+        '<h3>年度水庫明細</h3><div class="fixed-detail-controls">',
+        `<label><span>明細檢視</span><select id="fixed-detail-mode"><option value="year" ${fixedDetailMode === 'year' ? 'selected' : ''}>單一年度</option><option value="all" ${fixedDetailMode === 'all' ? 'selected' : ''}>完整年度列表</option></select></label>`,
+        `<label ${fixedDetailMode === 'all' ? 'hidden' : ''}>年度 <select id="fixed-detail-year">`,
         Array.from(
           { length: HORIZON_YEARS },
           (_, i) =>
@@ -3843,10 +4060,24 @@
           )
           .join(''),
         '</div>',
-        year
-          ? `<div class="fixed-detail-totals"><span>生活費目標 ${money(year.spend)}</span><span>實際生活費 ${money(year.actualSpend)}</span><span>生活費缺口 ${money(year.unmetSpend)}</span><span>必要生活費缺口 ${money(year.floorGap)}</span><span>保證性收入 ${money(year.guaranteedIncome)}</span></div><div class="table-wrap"><table><tbody>${yearDetailRow(year, Object.fromEntries(profile.plan.buckets.map(bucket => [bucket.id, bucket])), profile.plan)}</tbody></table></div>`
-          : '<p>此方案已於較早年度耗盡；本年沒有模擬明細。</p>',
+        fixedDetailMode === 'all'
+          ? renderFixedAnnualList(profile)
+          : year
+            ? `<div class="fixed-detail-totals"><span>生活費目標 ${money(year.spend)}</span><span>實際生活費 ${money(year.actualSpend)}</span><span>生活費缺口 ${money(year.unmetSpend)}</span><span>必要生活費缺口 ${money(year.floorGap)}</span><span>保證性收入 ${money(year.guaranteedIncome)}</span><span><span>意外支出缺口</span> ${money(year.eventUnmet)}</span></div><div class="table-wrap"><table><tbody>${yearDetailRow(year, Object.fromEntries(profile.plan.buckets.map(bucket => [bucket.id, bucket])), profile.plan)}</tbody></table></div>`
+            : '<p>此方案已於較早年度耗盡；本年沒有模擬明細。</p>',
       );
+      $('#fixed-detail-mode').onchange = event => {
+        fixedDetailMode = event.target.value;
+        renderDetail();
+      };
+      host.querySelectorAll('[data-fixed-expand]').forEach(button => {
+        button.onclick = () => {
+          const selected = Number(button.dataset.fixedExpand);
+          fixedExpandedYear = fixedExpandedYear === selected ? null : selected;
+          renderDetail();
+          host.querySelector(`[data-fixed-expand="${selected}"]`)?.focus();
+        };
+      });
       $('#fixed-detail-year').onchange = event => {
         fixedComparisonYear = Number(event.target.value);
         renderDetail();
@@ -3865,6 +4096,7 @@
     };
     root.querySelectorAll('[data-fixed-jump]').forEach(button => {
       button.onclick = () => {
+        fixedDetailMode = 'year';
         fixedComparisonYear = Number(button.dataset.fixedJump);
         fixedComparisonProfile = button.dataset.fixedProfile;
         renderDetail();
@@ -4038,7 +4270,7 @@
       : spendShortfall
         ? `第 ${firstShortfallYear} 年首度缺口；累計 ${money(cumulativeUnmet)}${saturationNote}${floorNote}`
         : eventShortfall
-          ? `生活費皆有來源；非計畫支出曾有缺口${saturationNote}${floorNote}`
+          ? `生活費皆有來源；意外支出曾有缺口${saturationNote}${floorNote}`
           : `${HORIZON_YEARS} 年內生活費皆有來源${saturationNote}${floorNote}`;
     const floorConstrained = floorBindingYears > 0;
     const ruleCard = html(
@@ -4090,11 +4322,11 @@
     const projection = html(
       `<div class="projection"><div class="projection-heading">`,
       `<h3>第 ${projectionStart + 1}–${lastShownYear} 年提領軌跡 `,
-      '<small>可逐年設定非計畫支出與核心報酬；可同時展開多個年末資產查看水庫明細</small></h3>',
+      '<small>可逐年設定意外支出與核心報酬；可同時展開多個年末資產查看水庫明細</small></h3>',
       projectionControls,
       // 這張表跟另外兩張一樣要包在 .table-wrap 裡：沒包的話窄視窗下它會撐寬整份文件，
       // 讓整個視窗多一條橫向捲軸，而不是只在面板內捲動。
-      '</div><div class="table-wrap"><table><thead><tr><th>年度</th><th>計畫支出</th><th>非計畫支出</th>',
+      '</div><div class="table-wrap"><table><thead><tr><th>年度</th><th>計畫支出</th><th>意外支出</th>',
       '<th>資金來源</th><th>核心報酬</th><th>年末資產</th></tr></thead>',
       `<tbody>${rows}</tbody></table></div></div>`,
     );
@@ -4138,8 +4370,8 @@
       '生活費先使用配息，其餘按 ' +
         plan.withdrawalOrders.planned.map(id => withdrawalLabels[id]).join(' → ') +
         ' 支應。',
-      '必要生活費與非計畫支出可突破熊市提款門檻；可調整生活費受門檻限制。',
-      '非計畫支出：' + eventPolicyDescriptions[plan.eventWithdrawalPolicy],
+      '必要生活費與意外支出可突破熊市提款門檻；可調整生活費受門檻限制。',
+      '意外支出：' + eventPolicyDescriptions[plan.eventWithdrawalPolicy],
       '補水目標：國債 ' +
         coverageTargets(plan).defense +
         '%、配息 ' +
@@ -4426,6 +4658,7 @@
       profiles
         .map(profile => {
           const plan = profile.plan;
+          const monthlySpend = planSpendInputModes.get(profile.id) === 'monthly';
           const enabled = !state.monteCarloComparisonEnabled || profile.enabled !== false;
           const activeCount = state.monteCarloProfiles.filter(item => item.enabled !== false).length;
           const total = plan.buckets.reduce((sum, bucket) => sum + bucket.amount, 0);
@@ -4460,7 +4693,7 @@
             `<div class="comparison-assets"><div class="metric-label-row"><label for="plan-assets-${profile.id}">起始流動資產</label><button type="button" class="lock-button${locked ? ' locked' : ''}" data-plan-lock="${profile.id}" aria-pressed="${locked}">${locked ? '🔒 已鎖定' : '🔓 鎖定'}</button></div><div class="money-input"><span>$</span><input id="plan-assets-${profile.id}" data-plan-total="${profile.id}" type="number" min="0" step="10000" value="${locked ? plan.lockedInitialAssets : total}" ${locked ? '' : 'disabled'} /></div><small>${locked ? '核心 ETF 自動補足差額；其他水庫超過總額時，鎖定總額會提高。' : '鎖定目前總額以比較配置；解鎖可比較不同資產規模。'}</small></div>`,
             '<div class="monte-carlo-plan-fields">',
             `<label>方案名稱<input data-plan-name="${profile.id}" type="text" maxlength="40" value="${escapeHtml(profile.name)}"/></label>`,
-            `<label>首年生活費<div class="input-suffix prefix"><span>$</span><input data-plan-field="annualSpend" data-profile="${profile.id}" type="number" min="0" step="1000" value="${plan.annualSpend}"/></div></label>`,
+            `<div class="plan-spend-field"><div class="plan-spend-heading"><label for="plan-spend-${profile.id}">首年生活費</label><select data-plan-spend-period="${profile.id}" aria-label="首年預計支出輸入週期"><option value="annual"${monthlySpend ? '' : ' selected'}>每年</option><option value="monthly"${monthlySpend ? ' selected' : ''}>每月</option></select></div><div class="input-suffix prefix"><span>$</span><input id="plan-spend-${profile.id}" data-plan-field="annualSpend" data-profile="${profile.id}" type="number" min="0" step="any" value="${monthlySpend ? plan.annualSpend / 12 : plan.annualSpend}"/></div></div>`,
             `<label>必要生活費<div class="input-suffix prefix"><span>$</span><input data-plan-field="spendingFloor.annualAmount" data-profile="${profile.id}" type="number" min="0" step="1000" value="${plan.spendingFloor.annualAmount}"/></div></label>`,
             `<label>年通膨率<div class="input-suffix compact"><input data-plan-field="inflation" data-profile="${profile.id}" type="number" min="-99" max="100" step="0.1" value="${plan.inflation}"/><span>%</span></div></label>`,
             ...plan.buckets.map(
@@ -4483,9 +4716,9 @@
             `<div><dt>國債梯</dt><dd>${treasury}<br><small>${treasuryStrategy}</small></dd></div>`,
             `<div><dt>保證性收入</dt><dd>${guaranteed}</dd></div>`,
             `<div><dt>生活費提款順序</dt><dd>${plan.withdrawalOrders.planned.map(id => withdrawalLabels[id]).join(' → ')}</dd></div>`,
-            `<div><dt>非計畫支出策略</dt><dd>${eventPolicy}<br><small>${eventPolicyDescriptions[plan.eventWithdrawalPolicy]}</small></dd></div>`,
+            `<div><dt>意外支出策略</dt><dd>${eventPolicy}<br><small>${eventPolicyDescriptions[plan.eventWithdrawalPolicy]}</small></dd></div>`,
             plan.eventWithdrawalPolicy === 'custom'
-              ? `<div><dt>非計畫支出提款順序</dt><dd>${plan.withdrawalOrders.event.map(id => withdrawalLabels[id]).join(' → ')}</dd></div>`
+              ? `<div><dt>意外支出提款順序</dt><dd>${plan.withdrawalOrders.event.map(id => withdrawalLabels[id]).join(' → ')}</dd></div>`
               : '',
             '</dl></details>',
             '</details>',
@@ -4547,6 +4780,14 @@
         renderMonteCarlo();
       };
     });
+    root.querySelectorAll('[data-plan-spend-period]').forEach(select => {
+      select.onchange = () => {
+        const id = select.dataset.planSpendPeriod;
+        planSpendInputModes.set(id, select.value === 'monthly' ? 'monthly' : 'annual');
+        renderMonteCarloProfile();
+        root.querySelector(`[data-plan-spend-period="${id}"]`).focus();
+      };
+    });
     root.querySelectorAll('[data-plan-field]').forEach(input => {
       input.onchange = event => {
         if (!event.target.reportValidity() || event.target.value === '') return;
@@ -4555,7 +4796,9 @@
           if (keys[0] === 'coverageTargets') draft.coverageTargets = coverageTargets(draft);
           let target = draft;
           keys.slice(0, -1).forEach(key => (target = target[key]));
-          target[keys.at(-1)] = Number(event.target.value);
+          const monthly =
+            keys[0] === 'annualSpend' && planSpendInputModes.get(event.target.dataset.profile) === 'monthly';
+          target[keys.at(-1)] = Number(event.target.value) * (monthly ? 12 : 1);
         });
       };
     });
@@ -4714,7 +4957,7 @@
       ),
       order('planned', '生活費本金提款順序（配息優先）'),
       fieldset(
-        '非計畫支出',
+        '意外支出',
         strategy(
           'event',
           '提款策略',
@@ -4727,7 +4970,7 @@
           plan.eventWithdrawalPolicy,
         ) + `<p class="hint">${eventPolicyDescriptions[plan.eventWithdrawalPolicy]}</p>`,
       ),
-      plan.eventWithdrawalPolicy === 'custom' ? order('event', '非計畫支出自訂提款順序') : '',
+      plan.eventWithdrawalPolicy === 'custom' ? order('event', '意外支出自訂提款順序') : '',
     );
   }
   // 先填梯內空期，沒有空期才延長一年；補梯範圍跟著最遠到期年走。
@@ -4869,7 +5112,9 @@
     if (path.fixedEvent)
       plan.emergencyEvents[path.fixedEvent.year] =
         (plan.emergencyEvents[path.fixedEvent.year] ?? 0) + path.fixedEvent.amount;
-    const { years } = simulate(plan, sourceResult.scenario);
+    const replay = simulate(plan, sourceResult.scenario);
+    const { years } = replay;
+    const eventFunding = eventFundingSummary(replay, plan.emergencyEvents);
     const root = $('#representative-detail');
     root.hidden = false;
     root.innerHTML =
@@ -4879,7 +5124,7 @@
       nameHtml(profileName || 'MC 方案') +
       '</h3><p>僅查看本次計算，不改動 MC 方案或固定情境。資產歸零後停止。</p><div class="table-wrap"><table><thead><tr><th>年度</th><th>生活費目標</th><th>實際生活費</th><th>生活費缺口</th>' +
       plan.buckets.map(b => '<th>' + nameHtml(b.name) + '</th>').join('') +
-      '<th>總資產</th></tr></thead><tbody>' +
+      '<th>意外支出</th><th>意外支出已支應</th><th>意外支出缺口</th><th>總資產</th></tr></thead><tbody>' +
       years
         .map(
           y =>
@@ -4893,12 +5138,19 @@
             money(y.unmetSpend ?? 0) +
             '</td>' +
             plan.buckets.map(b => '<td>' + money(y.values[b.id]) + '</td>').join('') +
+            [y.eventSpend, y.eventSpend - y.eventUnmet, y.eventUnmet]
+              .map(value => '<td>' + money(value) + '</td>')
+              .join('') +
             '<td>' +
             money(y.total) +
             '</td></tr>',
         )
         .join('') +
-      '</tbody></table></div>';
+      '</tbody></table></div>' +
+      '<p><span>耗盡後意外支出缺口</span> ' +
+      money(eventFunding.annual.filter(row => row.stopped).reduce((sum, row) => sum + row.unpaid, 0)) +
+      '</p>' +
+      '<p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>';
     applyLanguage();
   }
   function copyRepresentativePathToPlanner(label) {
@@ -4922,7 +5174,7 @@
       ...(path.safeRates ? { safeRates: path.safeRates } : {}),
       ...(path.bxmMonthlyPath ? { bxmMonthlyPath: path.bxmMonthlyPath } : {}),
       ...(path.incomeMonthlyPath ? { incomeMonthlyPath: path.incomeMonthlyPath } : {}),
-      // Monte Carlo 事件依累積通膨計算，可能帶有小數；水庫頁是以整數美元輸入非計畫支出，
+      // Monte Carlo 事件依累積通膨計算，可能帶有小數；水庫頁是以整數美元輸入意外支出，
       // 因此複製代表路徑時在交界處取整，避免把浮點尾數顯示進輸入框。
       // 確定事件與抽樣事件在水庫頁合併成同一年的一筆，重播才會得到同樣的結果。
       emergencyEvents: Object.fromEntries(
@@ -5007,6 +5259,7 @@
           ? Math.round(result.floorGapRate * result.paths) + ' / ' + result.paths + ' 條'
           : '未設定必要生活費') +
         '</strong></article></div>',
+      eventGapMetrics(result),
       '<div id="mc-asset-fan"></div>',
       '<details class="settings-fold"><summary>完整統計、假設與代表路徑</summary><div class="monte-carlo-metrics">',
       `<div><small>資產耗盡率</small><strong>${rate(result.assetDepletionRate)}</strong><span>${HORIZON_YEARS} 年內資產歸零的路徑</span></div>`,
@@ -5490,6 +5743,7 @@
         })
         .join(''),
       '</tbody></table></div>',
+      comparisonEventGapTable(comparison),
       '<div class="comparison-chart-tabs" role="tablist" aria-label="方案比較圖表">',
       '<button class="selected" role="tab" aria-selected="true" data-comparison-view="cagr">前 5 年 CAGR 十分位</button>',
       '<button role="tab" aria-selected="false" data-comparison-view="trajectory">30 年資產軌跡</button></div>',
@@ -5929,6 +6183,51 @@
     localStorage.setItem('retirement-language', currentLanguage);
     applyLanguage();
   };
+  $('#open-guide').onclick = event => openGuide(null, event.currentTarget);
+  $('#close-guide').onclick = () => closeGuide();
+  $('#guide-backdrop').onclick = () => closeGuide();
+  $('#guide-search').oninput = event => filterGuide(event.target.value);
+  $('#guide-drawer').onclick = event => {
+    const topic = event.target.closest('[data-guide-topic]');
+    if (topic) openGuide(topic.dataset.guideTopic, topic);
+    const anchor = event.target.closest('[data-guide-anchor]');
+    if (anchor) {
+      event.preventDefault();
+      document.querySelector(anchor.getAttribute('href'))?.scrollIntoView({ block: 'start' });
+    }
+    const step = event.target.closest('[data-guide-view]');
+    if (step) openGuideStep(step);
+  };
+  document.body.addEventListener('click', event => {
+    const topic = event.target.closest('[data-guide-topic]');
+    if (topic && !topic.closest('#guide-drawer')) openGuide(topic.dataset.guideTopic, topic);
+  });
+  document.addEventListener('keydown', event => {
+    const drawer = $('#guide-drawer');
+    if (drawer.hidden) return;
+    if (event.key === 'Escape') {
+      closeGuide();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...drawer.querySelectorAll('button, input, a[href], [tabindex]')].filter(
+      element => !element.disabled && !element.hidden && !element.closest('[hidden]'),
+    );
+    if (!focusable.length) {
+      event.preventDefault();
+      drawer.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !drawer.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !drawer.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   $('#preview-allocation').onclick = () =>
     allocationPreview(state, $('#allocation-preview'), draft => {
       state.buckets = draft.buckets;
@@ -5963,10 +6262,12 @@
     attributes: true,
     attributeFilter: ['title', 'aria-label', 'placeholder', 'data-tooltip'],
   });
+  initializeGuide();
   renderInputs();
   renderAll();
   renderMonteCarloProfile();
   renderMonteCarlo();
   setActiveView(currentView);
   applyLanguage();
+  if (!localStorage.getItem('retirement-guide-seen')) openGuide('guide-快速入門', $('#open-guide'));
 })();

@@ -329,10 +329,12 @@
       worstYearRatios = [],
       firstFloorBindingYears = [],
       cumulativeFloorGaps = [],
+      cumulativeEventGaps = [],
       sampledPaths = [],
       pathOutcomes = [],
       annualTotals = [],
       annualRealTotals = [];
+    let eventsModeled = false;
     let depleted = 0,
       shortfall = 0,
       zeroSpend = 0,
@@ -376,6 +378,9 @@
         emergencyEvents: withFixedEvent(input.emergencyEvents, fixedEvent),
       };
       const result = sim.simulate(copy, scenario);
+      const eventFunding = sim.eventFundingSummary(result, copy.emergencyEvents);
+      if (!eventsModeled) eventsModeled = eventFunding.annual.some(row => row.planned > 0);
+      if (eventFunding.hasGap) cumulativeEventGaps.push(eventFunding.total);
       const finalAssetsForPath = result.years.at(-1).total;
       finalAssets.push(finalAssetsForPath);
       // Keep the full population after depletion. Deflate each year-end value before ranking.
@@ -475,6 +480,12 @@
       spendShortfallRate: shortfall / pathCount,
       floorBindingRate: floorBound / pathCount,
       floorGapRate: floorGap / pathCount,
+      // False when no path had any sampled or scheduled event; the UI then omits the event-gap block.
+      eventsModeled,
+      eventGapRate: cumulativeEventGaps.length / pathCount,
+      cumulativeEventGap: cumulativeEventGaps.length
+        ? { p50: quantile(cumulativeEventGaps, 0.5), p75: quantile(cumulativeEventGaps, 0.75) }
+        : null,
       firstFloorBindingYear: firstFloorBindingYears.length
         ? { p25: quantile(firstFloorBindingYears, 0.25), p50: quantile(firstFloorBindingYears, 0.5) }
         : null,
