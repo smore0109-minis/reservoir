@@ -4,8 +4,16 @@
 // 以 IIFE 包住：傳統 <script> 共用同一個全域語彙環境，若 const 洩漏到全域，
 // app.js 端的 const { DEFAULT, ... } 會觸發 "Identifier has already been declared"。
 (function () {
+  const DEFAULT_HORIZON_YEARS = 30;
+  const MAX_HORIZON_YEARS = 60;
+  // Legacy public name kept for UI, Monte Carlo and historical-replay consumers until their
+  // variable-horizon work lands. New simulation code must use planningHorizonYears(state).
+  const HORIZON_YEARS = DEFAULT_HORIZON_YEARS;
   const DEFAULT = {
     schemaVersion: 1,
+    // Phase 1 keeps the product at 30 years while making the simulation contract horizon-aware.
+    // A later UI phase will expose this shared planning-period setting.
+    planningPeriod: { years: DEFAULT_HORIZON_YEARS },
     // 固定情境頁選中的情境。不存的話重開會固定回到 base，而 coreReturns／inflationRates
     // 是存下來的——畫面說「基準」，模擬卻仍在跑歷史回放，歷史控制區還被藏起來。
     scenario: 'base',
@@ -808,7 +816,6 @@
     const path = SCENARIO_CORE_RETURN_PATHS[key] || SCENARIO_CORE_RETURN_PATHS.base;
     return path[Math.min(Math.max(1, Number(year) || 1), path.length) - 1];
   }
-  const HORIZON_YEARS = 30;
   // 一個市場一列，報酬與 CPI 同筆。CPI 曾另外開一份 { sp500, nikkei } 對照表，於是新增
   // 市場時可能只加到一半：回放照跑，CPI 卻回 null 被呼叫端的 || {} 吞掉，靜默退回固定
   // 通膨而畫面仍寫著「歷史回放」。合併成一份之後，漏掉一半在結構上就不可能發生。
@@ -867,6 +874,10 @@
   function finiteNumber(value, fallback, minimum = -Infinity) {
     const number = Number(value);
     return Number.isFinite(number) && number >= minimum ? number : fallback;
+  }
+  function planningHorizonYears(state) {
+    const years = Math.round(Number(state?.planningPeriod?.years));
+    return Number.isFinite(years) && years >= 1 && years <= MAX_HORIZON_YEARS ? years : DEFAULT_HORIZON_YEARS;
   }
   // 設定欄位的界線只定義一次，遷移與即時輸入共用。這個專案在「載入路徑有守、即時輸入沒守」
   // 上踩過三次（熊市門檻、護欄區間、負數），逐欄位各寫一份界線就是第四次的溫床。
@@ -1083,6 +1094,7 @@
         ? { coverageTargets: coverageTargets({ buckets, coverageTargets: stored.coverageTargets }) }
         : {}),
       schemaVersion: DEFAULT.schemaVersion,
+      planningPeriod: { years: planningHorizonYears(stored) },
       // 載入路徑沒有地方顯示錯誤，超出界線的儲存值退回預設；即時輸入則夾住並立即顯示夾後的值。
       scenario: scenarios[stored.scenario] ? stored.scenario : fallback.scenario,
       historicalReplay: hydrateHistoricalReplay(stored.historicalReplay),
@@ -1618,6 +1630,7 @@
     );
   }
   function simulate(state, key) {
+    const horizonYears = planningHorizonYears(state);
     const scenario = scenarios[key],
       values = Object.fromEntries(state.buckets.map(b => [b.id, +b.amount]));
     const enabled = Object.fromEntries(state.buckets.map(b => [b.id, +b.amount > 0]));
@@ -1660,9 +1673,9 @@
     // 原始計畫支出：第 1 年的生活費依通膨逐年成長，完全不受護欄調整與缺口影響。這是
     // 「當初打算花多少」的基準線。護欄的工作就是砍支出，拿砍完的數字當分母會讓「成功
     // 避免破產」與「照計畫過日子」看起來是同一件事（M5）；破產後沒花到的年份也不能從
-    // 分母消失（N3）——所以這條線一律跑滿 HORIZON_YEARS，與模擬是否提早中止無關。
+    // 分母消失（N3）——所以這條線一律跑滿 horizonYears，與模擬是否提早中止無關。
     const plannedSpendByYear = [];
-    for (let year = 1, planned = state.annualSpend; year <= HORIZON_YEARS; year++) {
+    for (let year = 1, planned = state.annualSpend; year <= horizonYears; year++) {
       plannedSpendByYear.push(planned);
       planned *= 1 + inflationRateForYear(state, year) / 100;
     }
@@ -1670,13 +1683,13 @@
     // 累計物價倍數自己算一份，不從 plannedSpendByYear 相除推導：年支出為 0 時那個除法會爆
     // （N8／N9 的零支出終局是既有情境）。步進口徑與 plannedSpendByYear 相同。
     const cpiFactorByYear = [];
-    for (let year = 1, factor = 1; year <= HORIZON_YEARS; year++) {
+    for (let year = 1, factor = 1; year <= horizonYears; year++) {
       cpiFactorByYear.push(factor);
       factor *= 1 + inflationRateForYear(state, year) / 100;
     }
     let priorSpend = state.annualSpend;
-    for (let year = 1; year <= HORIZON_YEARS; year++) {
-      // indexation 管的是第 1 年到第 30 年**整條線**，不分請領前後：金額一律以第 1 年幣值輸入。
+    for (let year = 1; year <= horizonYears; year++) {
+      // indexation 管的是第 1 年到規劃期末**整條線**，不分請領前後：金額一律以第 1 年幣值輸入。
       // full = 全程實質不變（my Social Security 給的就是今日美元的估算）、nominal = 全程名目不變
       // （商業固定年金契約上的給付額）。只有兩種：階梯式（台灣勞保那種累計 CPI 達門檻才調）被這
       // 兩個界夾住，而它是法定參數，依規矩要有出處並進 data/ 逐格比對，見〈延後決策〉。
@@ -2197,6 +2210,7 @@
       priorSpend = spend;
     }
     return {
+      horizonYears,
       years,
       plannedSpendTotal,
       spendShortfall,
@@ -2224,7 +2238,8 @@
   function eventFundingSummary(result, events = {}) {
     let total = 0;
     let firstYear = null;
-    const annual = Array.from({ length: HORIZON_YEARS }, (_, index) => {
+    const horizonYears = planningHorizonYears({ planningPeriod: { years: result?.horizonYears } });
+    const annual = Array.from({ length: horizonYears }, (_, index) => {
       const year = index + 1;
       const row = result.years[index];
       const planned = row ? row.eventSpend : Math.max(0, Number(events[year]) || 0);
@@ -2242,6 +2257,9 @@
   const exported = {
     eventFundingSummary,
     DEFAULT,
+    DEFAULT_HORIZON_YEARS,
+    MAX_HORIZON_YEARS,
+    planningHorizonYears,
     scenarios,
     SCENARIO_CORE_RETURN_PATHS,
     scenarioCoreReturn,
