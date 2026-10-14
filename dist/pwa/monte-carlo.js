@@ -26,11 +26,15 @@
   // 路徑輸入和退休計畫分開：同一組市場／事件衝擊才能比較兩個計畫，而不是比較兩次
   // 抽樣的雜訊。沒有 BXM 時刻意維持舊版每年 normal()（兩次 next）後再抽事件（一次 next）的
   // 順序，使純大盤單方案與比較的 golden 結果逐位不變。BXM 方案才需要月頻市場與專屬殘差。
-  function generateSharedPathInputs(settings, inflation, { includeBxm = false, incomeProfiles = [] } = {}) {
+  function generateSharedPathInputs(
+    settings,
+    inflation,
+    { includeBxm = false, incomeProfiles = [], horizonYears = sim.HORIZON_YEARS } = {},
+  ) {
     // 歷史模式有自己的亂數流與資料組裝；參數式模式的每一次 next() 都必須保持原樣，才能讓
     // 已儲存的種子、比較結果與 regression hash 繼續可重現。
     if (settings.samplingMode === 'historical')
-      return generateHistoricalSharedPathInputs(settings, inflation, { includeBxm, incomeProfiles });
+      return generateHistoricalSharedPathInputs(settings, inflation, { includeBxm, incomeProfiles, horizonYears });
     const next = random(settings.seed);
     const realIncomeProfiles = [...new Set(incomeProfiles.filter(kind => sim.DIVIDEND_ETF_PROFILES?.[kind]))];
     const nextPayout = realIncomeProfiles.includes('pbp') ? random((settings.seed ^ 0x70627031) >>> 0) : null;
@@ -38,14 +42,16 @@
     // 隨機通膨用獨立的亂數流：市場與事件的抽樣序列與固定通膨時逐位相同，差異只來自通膨本身。
     const nextInflation = settings.inflationModel === 'ar1' ? random((settings.seed ^ 0x9e3779b9) >>> 0) : null;
     // 壓力路徑不抽亂數：每條路徑套用同一段歷史 CPI。
-    const stressRates = sim.stressInflationPath(settings.inflationModel);
+    const stressRates = sim.stressInflationPath(settings.inflationModel, horizonYears);
+    if (sim.INFLATION_STRESS_PATHS[settings.inflationModel] && !stressRates)
+      throw new Error(`通膨壓力資料不足，無法涵蓋 ${horizonYears} 年規劃期`);
     const sigma = Math.sqrt(Math.log(1 + Math.pow(settings.volatility / 100 / (1 + settings.mean / 100), 2)));
     const mu = Math.log(1 + settings.mean / 100) - (sigma * sigma) / 2;
     return Array.from({ length: settings.paths }, () => {
       const coreReturns = [];
       const pbpPayoutYields = nextPayout
         ? Object.fromEntries(
-            Array.from({ length: sim.HORIZON_YEARS }, (_, i) => [
+            Array.from({ length: horizonYears }, (_, i) => [
               i + 1,
               sim.PBP_PAYOUT_YIELDS[Math.floor(nextPayout() * sim.PBP_PAYOUT_YIELDS.length)],
             ]),
@@ -61,7 +67,7 @@
       const inflationRates = nextInflation
         ? sim.inflationPath(
             inflation,
-            Array.from({ length: sim.HORIZON_YEARS }, () => normal(nextInflation)),
+            Array.from({ length: horizonYears }, () => normal(nextInflation)),
           )
         : stressRates
           ? { ...stressRates }
@@ -74,7 +80,7 @@
               1,
             )
           : Math.pow(1 + inflation / 100, year - 1);
-      for (let year = 1; year <= sim.HORIZON_YEARS; year++) {
+      for (let year = 1; year <= horizonYears; year++) {
         if (includeMonthly) {
           const monthlyMu = mu / 12;
           const monthlySigma = sigma / Math.sqrt(12);
@@ -96,10 +102,11 @@
         } else coreReturns.push((Math.exp(mu + sigma * normal(next)) - 1) * 100);
         if (next() < settings.eventProbability / 100) emergencyEvents[year] = settings.eventAmount * cpiFactor(year);
       }
+      const cagrYears = Math.min(5, coreReturns.length);
       const cagr5 =
         Math.pow(
-          coreReturns.slice(0, 5).reduce((value, annualReturn) => value * (1 + annualReturn / 100), 1),
-          1 / 5,
+          coreReturns.slice(0, cagrYears).reduce((value, annualReturn) => value * (1 + annualReturn / 100), 1),
+          1 / cagrYears,
         ) - 1;
       return {
         coreReturns,
@@ -123,7 +130,11 @@
   // 每個區塊都是原始資料上連續的曆年，且同一條 30 年路徑不可重複使用來源年。先將所有
   // 可用區塊洗牌、再貪婪挑不重疊者；50 年資料對 30 年路徑與最長 3 年區塊一定足夠，不靠
   // 可能失敗的重試迴圈。年度擾動只改幅度，報酬與 CPI 共用同一個 u，保留同期關係。
-  function generateHistoricalSharedPathInputs(settings, inflation, { includeBxm = false, incomeProfiles = [] } = {}) {
+  function generateHistoricalSharedPathInputs(
+    settings,
+    inflation,
+    { includeBxm = false, incomeProfiles = [], horizonYears = sim.HORIZON_YEARS } = {},
+  ) {
     const next = random(settings.seed);
     const nextEvent = random((settings.seed ^ 0x65766e74) >>> 0);
     const nextBxm = random((settings.seed ^ 0x62786d31) >>> 0);
@@ -140,10 +151,12 @@
       .map(Number)
       .filter(year => Number.isFinite(market.returns[year]) && Number.isFinite(market.cpi[year]))
       .sort((left, right) => left - right);
+    if (horizonYears > years.length)
+      throw new Error(`歷史資料只有 ${years.length} 年，無法組成不重複的 ${horizonYears} 年區塊路徑`);
     const candidates = years.filter((year, index) =>
       Array.from({ length: blockLength }, (_, offset) => years[index + offset] === year + offset).every(Boolean),
     );
-    const blocksPerPath = Math.ceil(sim.HORIZON_YEARS / blockLength);
+    const blocksPerPath = Math.ceil(horizonYears / blockLength);
     const chooseBlocks = () => {
       const shuffled = [...candidates];
       for (let index = shuffled.length - 1; index > 0; index--) {
@@ -159,14 +172,43 @@
         blockYears.forEach(year => used.add(year));
         if (selected.length === blocksPerPath) break;
       }
-      if (selected.length !== blocksPerPath) throw new Error('歷史資料不足，無法組成不重複的 30 年區塊路徑');
+      if (selected.length !== blocksPerPath)
+        throw new Error(`歷史資料不足，無法組成不重複的 ${horizonYears} 年區塊路徑`);
       return selected;
+    };
+    // Default 30-year runs retain their historical random stream exactly. Longer or remainder horizons
+    // use a shuffled partition of the source years, which guarantees uniqueness without retry loops.
+    const chooseYears = () => {
+      if (horizonYears === sim.HORIZON_YEARS) return chooseBlocks().flat().slice(0, horizonYears);
+      const blocks = [];
+      let block = [];
+      for (const year of years) {
+        if (block.length && (year !== block.at(-1) + 1 || block.length === blockLength)) {
+          blocks.push(block);
+          block = [];
+        }
+        block.push(year);
+      }
+      if (block.length) blocks.push(block);
+      const partial = blocks.at(-1)?.length < blockLength ? blocks.pop() : null;
+      for (let index = blocks.length - 1; index > 0; index--) {
+        const other = Math.floor(next() * (index + 1));
+        [blocks[index], blocks[other]] = [blocks[other], blocks[index]];
+      }
+      if (partial) blocks.push(partial);
+      const selected = [];
+      for (const candidate of blocks) {
+        selected.push(...candidate);
+        if (selected.length >= horizonYears) break;
+      }
+      if (selected.length < horizonYears) throw new Error(`歷史資料不足，無法組成不重複的 ${horizonYears} 年區塊路徑`);
+      return selected.slice(0, horizonYears);
     };
     return Array.from({ length: settings.paths }, () => {
       const coreReturns = [];
       const pbpPayoutYields = nextPayout
         ? Object.fromEntries(
-            Array.from({ length: sim.HORIZON_YEARS }, (_, i) => [
+            Array.from({ length: horizonYears }, (_, i) => [
               i + 1,
               sim.PBP_PAYOUT_YIELDS[Math.floor(nextPayout() * sim.PBP_PAYOUT_YIELDS.length)],
             ]),
@@ -181,53 +223,50 @@
       const incomeResiduals = realIncomeProfiles.length
         ? Object.fromEntries(realIncomeProfiles.map(kind => [kind, {}]))
         : null;
-      chooseBlocks()
-        .flat()
-        .slice(0, sim.HORIZON_YEARS)
-        .forEach((year, index) => {
-          const pathYear = index + 1;
-          const jitter = jitterBound ? (next() * 2 - 1) * jitterBound : 0;
-          const factor = 1 + jitter;
-          const annualReturn = Math.max(-99.999999, market.returns[year] * factor);
-          const cpi = market.cpi[year] * factor;
-          coreReturns.push(annualReturn);
-          inflationRates[pathYear] = cpi;
-          historicalSources.push({
-            year,
-            block: Math.floor(index / blockLength) + 1,
-            position: (index % blockLength) + 1,
-            jitter,
-          });
-          if (includeMonthly) {
-            // Synthetic dispersed months preserve annual compounding, not actual historical months.
-            const marketMonths = sim.marketMonthsForAnnualReturn(annualReturn);
-            if (includeBxm) {
-              bxmMarketReturns[pathYear] = marketMonths;
-              bxmResiduals[pathYear] = Array.from(
-                { length: 12 },
-                () => normal(nextBxm) * sim.BXM_MONTHLY_PROFILE.residualSd,
-              );
-            }
-            if (incomeMarketReturns) {
-              incomeMarketReturns[pathYear] = marketMonths;
-              for (const kind of realIncomeProfiles)
-                incomeResiduals[kind][pathYear] = Array.from(
-                  { length: 12 },
-                  () => normal(residualStreams[kind]) * sim.DIVIDEND_ETF_PROFILES[kind].residualSd,
-                );
-            }
-          }
-          const cpiFactor = Array.from(
-            { length: pathYear - 1 },
-            (_, earlier) => 1 + inflationRates[earlier + 1] / 100,
-          ).reduce((product, value) => product * value, 1);
-          if (nextEvent() < settings.eventProbability / 100)
-            emergencyEvents[pathYear] = settings.eventAmount * cpiFactor;
+      chooseYears().forEach((year, index) => {
+        const pathYear = index + 1;
+        const jitter = jitterBound ? (next() * 2 - 1) * jitterBound : 0;
+        const factor = 1 + jitter;
+        const annualReturn = Math.max(-99.999999, market.returns[year] * factor);
+        const cpi = market.cpi[year] * factor;
+        coreReturns.push(annualReturn);
+        inflationRates[pathYear] = cpi;
+        historicalSources.push({
+          year,
+          block: Math.floor(index / blockLength) + 1,
+          position: (index % blockLength) + 1,
+          jitter,
         });
+        if (includeMonthly) {
+          // Synthetic dispersed months preserve annual compounding, not actual historical months.
+          const marketMonths = sim.marketMonthsForAnnualReturn(annualReturn);
+          if (includeBxm) {
+            bxmMarketReturns[pathYear] = marketMonths;
+            bxmResiduals[pathYear] = Array.from(
+              { length: 12 },
+              () => normal(nextBxm) * sim.BXM_MONTHLY_PROFILE.residualSd,
+            );
+          }
+          if (incomeMarketReturns) {
+            incomeMarketReturns[pathYear] = marketMonths;
+            for (const kind of realIncomeProfiles)
+              incomeResiduals[kind][pathYear] = Array.from(
+                { length: 12 },
+                () => normal(residualStreams[kind]) * sim.DIVIDEND_ETF_PROFILES[kind].residualSd,
+              );
+          }
+        }
+        const cpiFactor = Array.from(
+          { length: pathYear - 1 },
+          (_, earlier) => 1 + inflationRates[earlier + 1] / 100,
+        ).reduce((product, value) => product * value, 1);
+        if (nextEvent() < settings.eventProbability / 100) emergencyEvents[pathYear] = settings.eventAmount * cpiFactor;
+      });
+      const cagrYears = Math.min(5, coreReturns.length);
       const cagr5 =
         Math.pow(
-          coreReturns.slice(0, 5).reduce((value, annualReturn) => value * (1 + annualReturn / 100), 1),
-          1 / 5,
+          coreReturns.slice(0, cagrYears).reduce((value, annualReturn) => value * (1 + annualReturn / 100), 1),
+          1 / cagrYears,
         ) - 1;
       return {
         coreReturns,
@@ -299,9 +338,9 @@
     return { sampleCount, zeroCount, edges, counts, overflowCount, overflowThreshold, maximum };
   }
   // Sort once per year and basis. Only percentiles and bin counts leave the Worker.
-  function summarizeAnnualAssets(paths) {
+  function summarizeAnnualAssets(paths, horizonYears = sim.HORIZON_YEARS) {
     const distributions = [];
-    const trajectory = Array.from({ length: sim.HORIZON_YEARS }, (_, index) => {
+    const trajectory = Array.from({ length: horizonYears }, (_, index) => {
       const values = paths.map(totals => totals[index]).sort((a, b) => a - b);
       const point = { year: index + 1 };
       for (const percentile of [10, 25, 50, 75, 90]) {
@@ -318,10 +357,12 @@
     return { trajectory, distributions };
   }
   function runMonteCarloForPaths(plan, settings, sharedPaths, { comparison = true } = {}) {
+    const horizonYears = sim.planningHorizonYears(plan);
     const scenario = settings.scenario;
     const inflationAverages = [];
     // 通膨壓力路徑同時帶入同期 GS5：現金報酬與新買國債票息跟著歷史利率走，每條路徑相同。
-    const safeRates = settings.samplingMode === 'historical' ? null : sim.stressSafeRates(settings.inflationModel);
+    const safeRates =
+      settings.samplingMode === 'historical' ? null : sim.stressSafeRates(settings.inflationModel, horizonYears);
     const floorActive = plan.spendingFloor?.annualAmount > 0;
     const finalAssets = [],
       planSpendRatios = [],
@@ -384,7 +425,7 @@
       const finalAssetsForPath = result.years.at(-1).total;
       finalAssets.push(finalAssetsForPath);
       // Keep the full population after depletion. Deflate each year-end value before ranking.
-      const totals = Array.from({ length: sim.HORIZON_YEARS }, (_, index) => result.years[index]?.total ?? 0);
+      const totals = Array.from({ length: horizonYears }, (_, index) => result.years[index]?.total ?? 0);
       annualTotals.push(totals);
       // Same fallback rule as simulate(): a missing or non-finite year uses the plan rate.
       const inflationSource = { inflationRates: input.inflationRates, inflation: plan.inflation };
@@ -427,7 +468,7 @@
       );
       if (result.cumulativeGuaranteedIncome > 0) hasGuaranteedIncome = true;
       worstYearRatios.push(
-        result.years.length < sim.HORIZON_YEARS
+        result.years.length < horizonYears
           ? 0
           : Math.min(...result.years.map(year => (year.plannedSpend ? year.actualSpend / year.plannedSpend : 1))),
       );
@@ -438,11 +479,11 @@
         floorBound++;
         firstFloorBindingYears.push(result.firstFloorBindingYear);
       }
-      // 歸零仍立即結束模擬。統計以完整 30 年計畫為準，未到達年份的支應為 0，
+      // 歸零仍立即結束模擬。統計以完整規劃期間為準，未到達年份的支應為 0，
       // 因此剩餘 Floor 全額列為缺口，不繼續推演年金或資產復甦。
       let cumulativeFloorGap = result.cumulativeFloorGap;
       if (floorActive && bankrupt) {
-        for (let index = result.years.length; index < sim.HORIZON_YEARS; index++)
+        for (let index = result.years.length; index < horizonYears; index++)
           cumulativeFloorGap +=
             plan.spendingFloor.annualAmount * inflationFactorAtYear(plan.inflation, input.inflationRates, index + 1);
       }
@@ -469,10 +510,11 @@
       sampledPaths.reduce((closest, candidate) =>
         Math.abs(candidate.finalAssets - target) < Math.abs(closest.finalAssets - target) ? candidate : closest,
       );
-    const nominalAssets = summarizeAnnualAssets(annualTotals);
-    const realAssets = summarizeAnnualAssets(annualRealTotals);
+    const nominalAssets = summarizeAnnualAssets(annualTotals, horizonYears);
+    const realAssets = summarizeAnnualAssets(annualRealTotals, horizonYears);
     return {
       ...settings,
+      horizonYears,
       paths: pathCount,
       scenario,
       floorActive,
@@ -530,13 +572,18 @@
     );
     // 結果是一次執行的快照，不能在 render 時回頭讀目前的 profile。否則更新快照但還沒重跑
     // 時，舊抽樣會被新設定貼錯標籤（年金已以 hasGuaranteedIncome 避開這個洞）。
-    const plan = state.monteCarloProfile || state;
+    const plan = {
+      ...(state.monteCarloProfile || state),
+      planningPeriod: { years: sim.planningHorizonYears(state) },
+    };
+    const horizonYears = sim.planningHorizonYears(plan);
     return runMonteCarloForPaths(
       plan,
       settings,
       generateSharedPathInputs(settings, plan.inflation, {
         includeBxm: plan.growthProfile?.kind === 'bxm',
         incomeProfiles: [plan.incomeProfile?.kind],
+        horizonYears,
       }),
       { comparison: false },
     );
@@ -547,10 +594,12 @@
     const settings = sampledMonteCarloSettings(
       sim.clampMonteCarlo({ ...sim.DEFAULT.monteCarlo, ...state.monteCarlo, ...options }),
     );
+    const horizonYears = sim.planningHorizonYears(state);
     const inflation = active[0].plan.inflation;
     const pathOptions = {
       includeBxm: active.some(profile => profile.plan.growthProfile?.kind === 'bxm'),
       incomeProfiles: active.map(profile => profile.plan.incomeProfile?.kind),
+      horizonYears,
     };
     const sharedPaths = generateSharedPathInputs(settings, inflation, pathOptions);
     // Reusing the seed and strategy set preserves market returns, event years and AR(1)
@@ -563,7 +612,7 @@
     const results = active.map(({ enabled, ...profile }) => ({
       ...profile,
       result: runMonteCarloForPaths(
-        profile.plan,
+        { ...profile.plan, planningPeriod: { years: horizonYears } },
         settings,
         profile.plan.inflation === inflation || fixedInflationPath
           ? sharedPaths
@@ -601,6 +650,7 @@
     });
     return {
       ...settings,
+      horizonYears,
       sharedPaths,
       profiles: results,
       deciles,

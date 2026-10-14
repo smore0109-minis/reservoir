@@ -12,7 +12,7 @@
     HISTORICAL_MARKETS,
     historicalReturnPath,
     historicalInflationPath,
-    HORIZON_YEARS,
+    planningHorizonYears,
     simulate,
     eventFundingSummary,
     coverageTargets,
@@ -42,6 +42,12 @@
   const monteCarloRunner = window.RetirementWorkerClient.createMonteCarloRunner();
   let monteCarloGeneration = 0;
   let state = load();
+  const currentHorizonYears = () => planningHorizonYears(state);
+  const axisYears = (start, end, segments) => [
+    ...new Set(
+      Array.from({ length: segments + 1 }, (_, index) => Math.round(start + ((end - start) * index) / segments)),
+    ),
+  ];
   if (!state.monteCarloProfiles?.length)
     state.monteCarloProfiles = [{ id: 'a', name: '方案 A', plan: monteCarloPlanSnapshot(state) }];
   normalizeTreasury();
@@ -73,7 +79,7 @@
   let scenarioComparisonYear = 1;
   let scenarioComparisonDetail = 's1';
   let mcAssetBasis = 'real';
-  let mcAssetYear = HORIZON_YEARS;
+  let mcAssetYear = currentHorizonYears();
   // 圖表線色一律引用目前主題的 CSS token，切換配色不必重畫圖表。
   const seriesColors = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
   // 四個固定水庫依 id 對應主題色；其他 id 保留資料中的顏色。
@@ -2262,7 +2268,10 @@
     return profile;
   }
   function fixedSinglePlan() {
-    const plan = monteCarloPlanSnapshot(selectedProfile().plan);
+    const plan = {
+      ...monteCarloPlanSnapshot(selectedProfile().plan),
+      planningPeriod: { years: currentHorizonYears() },
+    };
     for (const key of ['coreReturns', 'inflationRates', 'emergencyEvents', 'safeRates', 'bxmMonthlyPath']) {
       delete plan[key];
       if (state[key]) plan[key] = JSON.parse(JSON.stringify(state[key]));
@@ -2414,18 +2423,19 @@
       $('#historical-direction').value = state.historicalReplay.direction ?? 'forward';
     }
     const renderHistoricalPeriods = () => {
+      const horizonYears = currentHorizonYears();
       const market = $('#historical-market').value;
       const { returns, events } = HISTORICAL_MARKETS[market];
       const years = Object.keys(returns).map(Number);
       const firstStart = Math.min(...years);
-      const lastStart = Math.max(...years) - HORIZON_YEARS + 1;
+      const lastStart = Math.max(...years) - horizonYears + 1;
       const reverse = $('#historical-direction').value === 'reverse';
       const starts = reverse
         ? Array.from({ length: lastStart - firstStart + 1 }, (_, index) => Math.max(...years) - index)
         : Array.from({ length: lastStart - firstStart + 1 }, (_, index) => firstStart + index);
       $('#historical-start').innerHTML = starts
         .map(start => {
-          const end = start + (reverse ? -(HORIZON_YEARS - 1) : HORIZON_YEARS - 1);
+          const end = start + (reverse ? -(horizonYears - 1) : horizonYears - 1);
           // 序列風險的重點不是「有沒有碰到危機」，而是「危機落在退休第幾年」——第 3 年遇上
           // 次貸和第 25 年遇上，對同一份計畫是兩件完全不同的事。把落點直接寫進選項，才能
           // 一眼挑出要看的那一條路徑，而不必先套用再回頭數格子。
@@ -2439,8 +2449,8 @@
         })
         .join('');
       $('#historical-path-note').textContent = reverse
-        ? `${HISTORICAL_MARKETS[market].note}倒放會同時反轉報酬、CPI 與（美國）利率的年度順序；這是合成序列風險壓力測試，不是真實歷史。共 ${HORIZON_YEARS} 年路徑。`
-        : `${HISTORICAL_MARKETS[market].note}共 ${HORIZON_YEARS} 年路徑。`;
+        ? `${HISTORICAL_MARKETS[market].note}倒放會同時反轉報酬、CPI 與（美國）利率的年度順序；這是合成序列風險壓力測試，不是真實歷史。共 ${horizonYears} 年路徑。`
+        : `${HISTORICAL_MARKETS[market].note}共 ${horizonYears} 年路徑。`;
     };
     renderHistoricalPeriods();
     if (state.historicalReplay) $('#historical-start').value = state.historicalReplay.startYear;
@@ -2792,7 +2802,7 @@
     $('#ladder-total').textContent = `${money(totalFace)} 面額`;
     // MC may create custom ladder lengths; replay must keep them selectable.
     $('#ladder-length').innerHTML = Array.from(
-      { length: HORIZON_YEARS },
+      { length: currentHorizonYears() },
       (_, i) => `<option value="${i + 1}">${i + 1} 年</option>`,
     ).join('');
     $('#ladder-length').value = state.treasury.length;
@@ -2854,9 +2864,9 @@
       '<tr>',
       `<td><input class="income-label" data-index="${index}" type="text" value="${escapeHtml(source.label)}" placeholder="Social Security" /></td>`,
       `<td><div class="money-input"><span>$</span>${cell('income-amount', source.amount, 'min="0" step="1000"')}</div></td>`,
-      `<td>${cell('income-start', source.startYear, `min="1" max="${HORIZON_YEARS}" step="1"`)}</td>`,
+      `<td>${cell('income-start', source.startYear, `min="1" max="${currentHorizonYears()}" step="1"`)}</td>`,
       // 空白 = 終身給付。兼職與定期年金才需要結束年，而終身給付是多數情況，不該逼使用者填 30。
-      `<td>${cell('income-end', source.endYear ?? '', `min="1" max="${HORIZON_YEARS}" step="1" placeholder="終身"`)}</td>`,
+      `<td>${cell('income-end', source.endYear ?? '', `min="1" max="${currentHorizonYears()}" step="1" placeholder="終身"`)}</td>`,
       `<td><select class="income-indexation" data-index="${index}">${options}</select></td>`,
       `<td><button class="page-button income-remove" data-index="${index}" type="button">刪除</button></td>`,
       '</tr>',
@@ -2889,7 +2899,9 @@
             source.amount = clampIncomeField('amount', input.value, 0);
           else if (input.classList.contains('income-start'))
             source.startYear = clampIncomeField('startYear', input.value, 1);
-          else source.endYear = input.value === '' ? null : clampIncomeField('endYear', input.value, HORIZON_YEARS);
+          else
+            source.endYear =
+              input.value === '' ? null : clampIncomeField('endYear', input.value, currentHorizonYears());
           // 起訖顛倒的來源一年也付不出來；就地修正比留著一列永遠是 0 的設定好解釋。
           if (source.endYear !== null && source.endYear < source.startYear) source.endYear = source.startYear;
           renderAll();
@@ -3433,6 +3445,8 @@
     const profile = state.monteCarloProfiles.find(item => item.id === config.planId) || state.monteCarloProfiles[0];
     config.planId = profile.id;
     const plan = profile.plan;
+    const horizonYears = currentHorizonYears();
+    scenarioComparisonYear = Math.min(scenarioComparisonYear, horizonYears);
     const names = { sp500: 'S&P 500', taiwan: '台灣加權', nikkei: '日經 225' };
     // 三張卡可以選到完全相同的市場／年份／方向，編號讓圖例、表頭與明細仍能對應。
     const tag = item => '<span>情境</span> ' + item.id.slice(1) + ' · ';
@@ -3443,7 +3457,7 @@
       '</span> · ' +
       item.startYear +
       ' → ' +
-      (item.startYear + (item.direction === 'reverse' ? -1 : 1) * (HORIZON_YEARS - 1));
+      (item.startYear + (item.direction === 'reverse' ? -1 : 1) * (horizonYears - 1));
     const save = () => {
       try {
         localStorage.setItem('retirement-scenario-comparison', JSON.stringify(config));
@@ -3490,7 +3504,7 @@
       '<div class="scenario-comparison-cards">' +
         config.scenarios
           .map(item => {
-            const starts = api.historicalScenarioStarts(item.market, item.direction);
+            const starts = api.historicalScenarioStarts(item.market, item.direction, horizonYears);
             return (
               '<article><h3>' +
               label(item) +
@@ -3534,7 +3548,7 @@
                     '>' +
                     year +
                     ' → ' +
-                    (year + (item.direction === 'reverse' ? -29 : 29)) +
+                    (year + (item.direction === 'reverse' ? -(horizonYears - 1) : horizonYears - 1)) +
                     '</option>',
                 )
                 .join('') +
@@ -3549,7 +3563,7 @@
           .join('') +
         '</div>',
       '<p id="scenario-save-status" role="status"></p>',
-      '<details class="settings-fold"><summary>口徑與限制</summary><p>各市場使用本國 CPI，實質資產不是同一物價籃子的購買力比較。倒放是合成序列壓力測試，不是真實歷史。</p><p>不帶入固定情境逐年覆寫或 MC 事件；其餘配置與規則沿用所選方案。ETF 為策略模型，不是基金歷史績效回放。</p><p>實際／計畫生活費以完整 30 年原始計畫為分母；護欄放寬時實際支出可能高於原計畫，比例會超過 100%。耗盡後支應按零、必要缺口包含剩餘年份，不推演未來年金。曲線與明細於耗盡時停止。</p></details>',
+      `<details class="settings-fold"><summary>口徑與限制</summary><p>各市場使用本國 CPI，實質資產不是同一物價籃子的購買力比較。倒放是合成序列壓力測試，不是真實歷史。</p><p>不帶入固定情境逐年覆寫或 MC 事件；其餘配置與規則沿用所選方案。ETF 為策略模型，不是基金歷史績效回放。</p><p>實際／計畫生活費以完整 ${horizonYears} 年原始計畫為分母；護欄放寬時實際支出可能高於原計畫，比例會超過 100%。耗盡後支應按零、必要缺口包含剩餘年份，不推演未來年金。曲線與明細於耗盡時停止。</p></details>`,
       '<div id="scenario-comparison-results"></div>',
     );
     $('#scenario-edit-plan').onclick = () => setActiveView('plans-view');
@@ -3563,10 +3577,10 @@
         const item = config.scenarios.find(choice => choice.id === input.dataset.scenarioId);
         const key = input.dataset.scenarioField;
         if (key === 'direction' && item.direction !== input.value)
-          item.startYear += input.value === 'reverse' ? HORIZON_YEARS - 1 : -(HORIZON_YEARS - 1);
+          item.startYear += input.value === 'reverse' ? horizonYears - 1 : -(horizonYears - 1);
         item[key] = key === 'enabled' ? input.checked : key === 'startYear' ? Number(input.value) : input.value;
         if (key === 'market' || key === 'direction') {
-          const starts = api.historicalScenarioStarts(item.market, item.direction);
+          const starts = api.historicalScenarioStarts(item.market, item.direction, horizonYears);
           if (starts.length && !starts.includes(item.startYear))
             item.startYear = starts.reduce((closest, year) =>
               Math.abs(year - item.startYear) < Math.abs(closest - item.startYear) ? year : closest,
@@ -3579,12 +3593,12 @@
     const host = $('#scenario-comparison-results');
     let results;
     try {
-      results = api.compareHistoricalScenarios(plan, config.scenarios);
+      results = api.compareHistoricalScenarios({ ...plan, planningPeriod: { years: horizonYears } }, config.scenarios);
     } catch {
       host.innerHTML =
         '<p role="alert" class="scenario-comparison-error">' +
         (config.scenarios.some(item => item.enabled)
-          ? '情境缺乏完整 30 年資料，請調整市場、順序或年份；不會自動套用基準路徑。'
+          ? `情境缺乏完整 ${horizonYears} 年資料，請調整市場、順序或年份；不會自動套用基準路徑。`
           : '請至少啟用一個情境。') +
         '</p>';
       applyLanguage(root);
@@ -3602,10 +3616,10 @@
       height = 300,
       bottom = 54;
     const maximum = Math.max(1, initial, ...results.flatMap(item => item.trajectory.map(value))) * 1.04;
-    const x = year => left + (year / HORIZON_YEARS) * (width - left - right);
+    const x = year => left + (year / horizonYears) * (width - left - right);
     const y = total => 22 + (1 - total / maximum) * (height - bottom - 22);
     host.innerHTML = html(
-      '<div class="table-wrap scenario-metrics"><table><thead><tr><th>情境</th><th>第 30 年實質資產</th><th>資產耗盡年份</th><th>30 年實際／計畫生活費</th><th>30 年必要生活費缺口（名目累計）</th></tr></thead><tbody>' +
+      `<div class="table-wrap scenario-metrics"><table><thead><tr><th>情境</th><th>第 ${horizonYears} 年實質資產</th><th>資產耗盡年份</th><th>${horizonYears} 年實際／計畫生活費</th><th>${horizonYears} 年必要生活費缺口（名目累計）</th></tr></thead><tbody>` +
         results
           .map(
             item =>
@@ -3682,7 +3696,7 @@
       '<line id="scenario-chart-guide" class="chart-guide" y1="22" y2="' +
         (height - bottom) +
         '"/><g class="chart-axis">' +
-        [0, 10, 20, 30]
+        axisYears(0, horizonYears, 3)
           .map(year => '<text x="' + x(year) + '" y="' + (height - 30) + '" text-anchor="middle">' + year + '</text>')
           .join('') +
         '<text x="' +
@@ -3691,7 +3705,7 @@
         (height - 6) +
         '" text-anchor="middle">退休年度</text></g></svg>',
       '<label class="mc-fan-year">查看退休年度<input id="scenario-compare-year" type="range" min="1" max="' +
-        HORIZON_YEARS +
+        horizonYears +
         '" value="' +
         scenarioComparisonYear +
         '"/></label><div id="scenario-chart-readout" class="scenario-chart-readout" role="status" aria-live="polite"></div></section>',
@@ -3699,7 +3713,7 @@
         results.map(item => '<th>' + label(item.config) + '</th>').join('') +
         '</tr></thead><tbody>' +
         Array.from(
-          { length: HORIZON_YEARS },
+          { length: horizonYears },
           (_, index) =>
             '<tr data-scenario-year-row="' +
             (index + 1) +
@@ -3775,7 +3789,7 @@
           .join('') +
         '<label>年度<select id="scenario-detail-year">' +
         Array.from(
-          { length: HORIZON_YEARS },
+          { length: horizonYears },
           (_, i) =>
             '<option value="' +
             (i + 1) +
@@ -3847,9 +3861,9 @@
       const year = Math.max(
         1,
         Math.min(
-          HORIZON_YEARS,
+          horizonYears,
           Math.round(
-            ((((event.clientX - box.left) / box.width) * width - left) / (width - left - right)) * HORIZON_YEARS,
+            ((((event.clientX - box.left) / box.width) * width - left) / (width - left - right)) * horizonYears,
           ),
         ),
       );
@@ -3895,7 +3909,7 @@
             '</td></tr>',
         )
         .join('') +
-      '</tbody></table></div><p class="hint">僅計入曾有意外支出缺口的路徑；名目金額。</p><p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>'
+      `</tbody></table></div><p class="hint">僅計入曾有意外支出缺口的路徑；名目金額。</p><p class="hint">涵蓋完整 ${comparison.horizonYears ?? currentHorizonYears()} 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>`
     );
   }
   function eventGapMetrics(result) {
@@ -3908,7 +3922,7 @@
       (result.cumulativeEventGap
         ? money(result.cumulativeEventGap.p50) + ' / ' + money(result.cumulativeEventGap.p75)
         : '—') +
-      '</strong><span>僅計入曾有意外支出缺口的路徑；名目金額。</span></div></div><p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>'
+      `</strong><span>僅計入曾有意外支出缺口的路徑；名目金額。</span></div></div><p class="hint">涵蓋完整 ${result.horizonYears ?? currentHorizonYears()} 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>`
     );
   }
   function renderFixedAnnualList(profile) {
@@ -3929,7 +3943,7 @@
         .map(label => '<th>' + label + '</th>')
         .join('') +
       '</tr></thead><tbody>' +
-      Array.from({ length: HORIZON_YEARS }, (_, index) => {
+      Array.from({ length: profile.result.horizonYears ?? currentHorizonYears() }, (_, index) => {
         const year = profile.result.years[index];
         if (!year) return '<tr><th>' + fixedYearLabel(index + 1) + '</th><td colspan="8">已停止</td></tr>';
         return (
@@ -3969,6 +3983,8 @@
       return;
     }
     if (!profiles.some(profile => profile.id === fixedComparisonProfile)) fixedComparisonProfile = profiles[0].id;
+    const horizonYears = profiles[0].result.horizonYears;
+    fixedComparisonYear = Math.min(fixedComparisonYear, horizonYears);
     const metrics = {
       total: '年末總資產',
       actualSpend: '實際生活費',
@@ -3983,7 +3999,7 @@
         ...profile.result.years.map(y => y.total),
       ]),
     );
-    const x = year => 80 + (year / HORIZON_YEARS) * 890;
+    const x = year => 80 + (year / horizonYears) * 890;
     const y = value => 240 - (value / maximum) * 210;
     const chart =
       '<section class="asset-chart"><h3>方案資產走勢</h3><div class="chart-legend">' +
@@ -4003,7 +4019,7 @@
         .join('') +
       '</g>' +
       '<g class="chart-axis">' +
-      [0, 5, 10, 15, 20, 25, 30]
+      axisYears(0, horizonYears, 6)
         .map(year => `<text x="${x(year)}" y="270" text-anchor="middle">${year}</text>`)
         .join('') +
       '</g>' +
@@ -4045,7 +4061,7 @@
       profiles.map(profile => `<th>${nameHtml(profile.name)}</th>`).join(''),
       '</tr></thead><tbody>',
       Array.from(
-        { length: HORIZON_YEARS },
+        { length: horizonYears },
         (_, i) =>
           `<tr><th>${fixedYearLabel(i + 1)}</th>${profiles
             .map(profile => {
@@ -4065,7 +4081,7 @@
         `<label><span>明細檢視</span><select id="fixed-detail-mode"><option value="year" ${fixedDetailMode === 'year' ? 'selected' : ''}>單一年度</option><option value="all" ${fixedDetailMode === 'all' ? 'selected' : ''}>完整年度列表</option></select></label>`,
         `<label ${fixedDetailMode === 'all' ? 'hidden' : ''}>年度 <select id="fixed-detail-year">`,
         Array.from(
-          { length: HORIZON_YEARS },
+          { length: horizonYears },
           (_, i) =>
             `<option value="${i + 1}" ${i + 1 === fixedComparisonYear ? 'selected' : ''}>${fixedYearLabel(i + 1)}</option>`,
         ).join(''),
@@ -4151,6 +4167,7 @@
       firstFloorGapYear,
       cumulativeFloorGap,
       bankruptYear,
+      horizonYears,
     } = simulate(plan, currentScenario);
     const first = years[0],
       last = years[years.length - 1],
@@ -4251,7 +4268,7 @@
     );
     const shownYears = years.slice(projectionStart, projectionStart + 5);
     const rows = shownYears.map(y => renderProjectionRow(y, sourceName, bucketById, years, plan)).join('');
-    const assetCardLabel = bankruptYear ? `第 ${bankruptYear} 年停止時資產` : `${HORIZON_YEARS} 年後預估資產`;
+    const assetCardLabel = bankruptYear ? `第 ${bankruptYear} 年停止時資產` : `${horizonYears} 年後預估資產`;
     const assetCard = html(
       `<article><span>${assetCardLabel}</span><strong>${money(last.total)}</strong>`,
       change === null
@@ -4288,7 +4305,7 @@
         ? `第 ${firstShortfallYear} 年首度缺口；累計 ${money(cumulativeUnmet)}${saturationNote}${floorNote}`
         : eventShortfall
           ? `生活費皆有來源；意外支出曾有缺口${saturationNote}${floorNote}`
-          : `${HORIZON_YEARS} 年內生活費皆有來源${saturationNote}${floorNote}`;
+          : `${horizonYears} 年內生活費皆有來源${saturationNote}${floorNote}`;
     const floorConstrained = floorBindingYears > 0;
     const ruleCard = html(
       `<article><span>規則狀態</span><strong class="${bankruptYear || spendShortfall ? 'down' : floorConstrained ? 'warn' : 'up'}">`,
@@ -4351,12 +4368,12 @@
     const summaryOpen = $('#scenario-statistics')?.open;
     const headline =
       '<div class="result-headline">' +
-      '<article><small>資產能否維持 30 年</small><strong>' +
+      `<article><small>資產能否維持 ${horizonYears} 年</small><strong>` +
       (bankruptYear ? '第 ' + bankruptYear + ' 年耗盡' : '本情境未耗盡') +
       '</strong></article>' +
       '<article><small>累計實際／原始生活費計畫</small><strong>' +
       (plannedSpendTotal > 0 ? percent((cumulativeActual / plannedSpendTotal) * 100) : '未設定生活費') +
-      '</strong><small>原始計畫包含完整 30 年</small></article>' +
+      `</strong><small>原始計畫包含完整 ${horizonYears} 年</small></article>` +
       '<article><small>必要開銷能否支付</small><strong>' +
       (plan.spendingFloor.annualAmount
         ? cumulativeFloorGap > 1
@@ -4842,6 +4859,7 @@
   }
   function renderMonteCarloPlanEditors(profile) {
     const { plan, id } = profile;
+    const horizonYears = currentHorizonYears();
     const targets = coverageTargets(plan);
     const options = (items, value) =>
       items
@@ -4930,14 +4948,14 @@
           '縮梯至 1 年的年數（0＝關閉）',
           'treasury.drawdownYears',
           plan.treasury.drawdownYears ?? 0,
-          'min="0" max="30" step="1" class="mc-short-input"',
+          `min="0" max="${horizonYears}" step="1" class="mc-short-input"`,
         ) +
           `<p class="hint">目前 ${plan.treasury.rungs.length} 階，補梯範圍 ${plan.treasury.length} 年（最遠到期年）；範圍內沒有面額的年度會在正報酬年補買。金額會同步至防守水庫，刪除一階會減少初始資產。</p>` +
           plan.treasury.rungs
             .map(
               (r, i) =>
                 `<div class="mc-editor-row mc-rung-row">` +
-                rungField(i, 'maturityYear', '到期年', r.maturityYear, 'min="1" max="30" step="1"') +
+                rungField(i, 'maturityYear', '到期年', r.maturityYear, `min="1" max="${horizonYears}" step="1"`) +
                 rungField(i, 'face', '面額 $', r.face, 'min="0" step="any"') +
                 rungField(i, 'coupon', '票息 %', r.coupon, 'min="0" step="any"') +
                 `<button type="button" class="page-button mc-row-remove" data-mc-remove-rung="${i}" data-profile="${id}"${plan.treasury.rungs.length === 1 ? ' disabled' : ''}>刪除</button></div>`,
@@ -4953,13 +4971,19 @@
               '<div class="mc-editor-row mc-income-row">' +
               incomeField(i, 'label', '名稱', source.label, 'type="text"') +
               incomeField(i, 'amount', '年收入 $（第 1 年幣值）', source.amount, 'type="number" min="0" step="any"') +
-              incomeField(i, 'startYear', '開始年', source.startYear, 'type="number" min="1" max="30" step="1"') +
+              incomeField(
+                i,
+                'startYear',
+                '開始年',
+                source.startYear,
+                `type="number" min="1" max="${horizonYears}" step="1"`,
+              ) +
               incomeField(
                 i,
                 'endYear',
                 '結束年（留空＝終身）',
                 source.endYear,
-                'type="number" min="1" max="30" step="1"',
+                `type="number" min="1" max="${horizonYears}" step="1"`,
               ) +
               `<label>調整方式<select data-mc-income="indexation" data-index="${i}" data-profile="${id}">${options(
                 [
@@ -4993,7 +5017,9 @@
   }
   // 先填梯內空期，沒有空期才延長一年；補梯範圍跟著最遠到期年走。
   function nextFreeMaturityYear(rungs) {
-    return Array.from({ length: HORIZON_YEARS }, (_, i) => i + 1).find(y => !rungs.some(r => r.maturityYear === y));
+    return Array.from({ length: currentHorizonYears() }, (_, i) => i + 1).find(
+      y => !rungs.some(r => r.maturityYear === y),
+    );
   }
   function bindMonteCarloPlanEditors(root) {
     const bind = (selector, mutate) =>
@@ -5081,11 +5107,12 @@
       return '通膨與報酬逐年配對取自同一筆歷史資料；非核心水庫仍使用所選情境的固定報酬。';
     const stress = INFLATION_STRESS_PATHS[result?.inflationModel];
     if (stress) {
-      const rates = Object.values(stressInflationPath(result.inflationModel));
-      const safeCash = Object.values(stressSafeRates(result.inflationModel)).map(rate => rate.cash);
+      const horizonYears = result.horizonYears ?? currentHorizonYears();
+      const rates = Object.values(stressInflationPath(result.inflationModel, horizonYears));
+      const safeCash = Object.values(stressSafeRates(result.inflationModel, horizonYears)).map(rate => rate.cash);
       return html(
-        `通膨採歷史壓力路徑：${stress.label}，${stress.startYear}–${stress.startYear + HORIZON_YEARS - 1} 實際 12 月年增率，`,
-        `30 年平均 ${percent(result.inflationAverage.p50)}、最高 ${percent(Math.max(...rates))}；每條路徑相同，市場報酬仍隨機。`,
+        `通膨採歷史壓力路徑：${stress.label}，${stress.startYear}–${stress.startYear + horizonYears - 1} 實際 12 月年增率，`,
+        `${horizonYears} 年平均 ${percent(result.inflationAverage.p50)}、最高 ${percent(Math.max(...rates))}；每條路徑相同，市場報酬仍隨機。`,
         `緊急預備金與到期現金改賺同年 3 個月國庫券平均（${percent(Math.min(...safeCash))}–${percent(Math.max(...safeCash))}），`,
         '補梯新買的國債票息取同年 12 月五年期公債殖利率（GS5）。',
       );
@@ -5097,7 +5124,7 @@
       `年衝擊 ${INFLATION_AR1.shockSd.toFixed(2)} 個百分點（${INFLATION_AR1.firstYear}–${INFLATION_AR1.lastYear} 美國 CPI 估計，`,
       `下限 ${INFLATION_FLOOR}%；不含 70 年代式失控）`,
       average
-        ? `；30 年平均通膨 P10／P50／P90 為 ${percent(average.p10)}／${percent(average.p50)}／${percent(average.p90)}。`
+        ? `；${result.horizonYears ?? currentHorizonYears()} 年平均通膨 P10／P50／P90 為 ${percent(average.p10)}／${percent(average.p50)}／${percent(average.p90)}。`
         : '。',
     );
   }
@@ -5123,6 +5150,7 @@
     const path = sourceResult?.representativePaths?.[label];
     if (!path || !sourcePlan) return;
     const plan = JSON.parse(JSON.stringify(sourcePlan));
+    plan.planningPeriod = { years: sourceResult.horizonYears ?? currentHorizonYears() };
     plan.coreReturns = Object.fromEntries(path.coreReturns.map((value, index) => [index + 1, value]));
     for (const key of ['inflationRates', 'safeRates', 'bxmMonthlyPath', 'incomeMonthlyPath'])
       if (path[key]) plan[key] = path[key];
@@ -5168,7 +5196,7 @@
       '<p><span>耗盡後意外支出缺口</span> ' +
       money(eventFunding.annual.filter(row => row.stopped).reduce((sum, row) => sum + row.unpaid, 0)) +
       '</p>' +
-      '<p class="hint">涵蓋完整 30 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>';
+      `<p class="hint">涵蓋完整 ${sourceResult.horizonYears ?? currentHorizonYears()} 年已抽定及確定事件；耗盡後事件視為未支應，不延長收支模擬。缺口不轉為負債，也不會事後追繳。</p>`;
     applyLanguage();
   }
   function copyRepresentativePathToPlanner(label) {
@@ -5250,6 +5278,7 @@
       return;
     }
     const result = monteCarloResult;
+    const horizonYears = result.horizonYears ?? currentHorizonYears();
     const rate = value => percent(value * 100);
     const floorActive = result.floorActive;
     root.className = 'monte-carlo-results';
@@ -5262,7 +5291,7 @@
         money(resultPlan.annualSpend) +
         '</p>',
       '<div class="result-headline">',
-      '<article><small>30 年內資產耗盡</small><strong>' +
+      `<article><small>${horizonYears} 年內資產耗盡</small><strong>` +
         Math.round(result.assetDepletionRate * result.paths) +
         ' / ' +
         result.paths +
@@ -5280,9 +5309,9 @@
       eventGapMetrics(result),
       '<div id="mc-asset-fan"></div>',
       '<details class="settings-fold"><summary>完整統計、假設與代表路徑</summary><div class="monte-carlo-metrics">',
-      `<div><small>資產耗盡率</small><strong>${rate(result.assetDepletionRate)}</strong><span>${HORIZON_YEARS} 年內資產歸零的路徑</span></div>`,
+      `<div><small>資產耗盡率</small><strong>${rate(result.assetDepletionRate)}</strong><span>${horizonYears} 年內資產歸零的路徑</span></div>`,
       `<div><small>生活費曾缺口率</small><strong>${rate(result.spendShortfallRate)}</strong><span>至少一年未完全支應生活費</span></div>`,
-      `<div><small>年末資產 P25 / P50 / P75</small><strong>${money(result.finalAssets.p25, true)} / ${money(result.finalAssets.p50, true)} / ${money(result.finalAssets.p75, true)}</strong><span>第 ${HORIZON_YEARS} 年總資產分位數</span></div>`,
+      `<div><small>年末資產 P25 / P50 / P75</small><strong>${money(result.finalAssets.p25, true)} / ${money(result.finalAssets.p50, true)} / ${money(result.finalAssets.p75, true)}</strong><span>第 ${horizonYears} 年總資產分位數</span></div>`,
       // 護欄的工作就是砍支出，所以「沒有缺口」不等於「照計畫過日子」。這兩格的分母一律
       // 是未經護欄調整的原始計畫，否則一份把生活水準砍半的計畫會和完美執行的看起來一樣。
       `<div><small>累計實際 / 原始計畫 P25 / P50</small><strong>${rate(result.planSpendRatio.p25)} / ${rate(result.planSpendRatio.p50)}</strong><span>終身總共花到計畫的幾成；全部 ${result.paths.toLocaleString()} 條路徑</span></div>`,
@@ -5330,7 +5359,7 @@
         )
         .join(''),
       '</tr></thead><tbody>',
-      Array.from({ length: HORIZON_YEARS }, (_, index) => {
+      Array.from({ length: horizonYears }, (_, index) => {
         const cells = ['p25', 'p50', 'p75']
           .map(label => {
             const annualReturn = result.representativePaths[label].coreReturns[index];
@@ -5364,6 +5393,8 @@
     const root = $('#mc-asset-fan');
     if (!root || !result.totalAssetTrajectory || !result.realTotalAssetTrajectory) return;
     const points = mcAssetBasis === 'real' ? result.realTotalAssetTrajectory : result.totalAssetTrajectory;
+    const horizonYears = result.horizonYears ?? points.length;
+    mcAssetYear = Math.min(mcAssetYear, horizonYears);
     // 重畫會替換整個區塊；記住原本有焦點的控制項（滑桿或口徑選單），鍵盤操作才不會在縮放時中斷。
     const focusedId = root.contains(document.activeElement) ? document.activeElement.id : '';
     const width = Math.max(260, Math.min(960, root.clientWidth ? root.clientWidth - 42 : 960)),
@@ -5373,7 +5404,7 @@
       top = 22,
       bottom = 54;
     const max = Math.max(1, ...points.map(point => point.p90)) * 1.06;
-    const x = year => left + ((year - 1) / (HORIZON_YEARS - 1)) * (width - left - right);
+    const x = year => left + ((year - 1) / Math.max(1, horizonYears - 1)) * (width - left - right);
     const y = value => top + (1 - value / max) * (height - top - bottom);
     const band = (lower, upper) =>
       points
@@ -5425,7 +5456,7 @@
         '"/>',
       '<line id="mc-fan-guide" class="mc-fan-guide" y1="' + top + '" y2="' + (height - bottom) + '"/>',
       '<g class="chart-axis">' +
-        (width < 600 ? [1, 10, 20, 30] : [1, 5, 10, 15, 20, 25, 30])
+        axisYears(1, horizonYears, width < 600 ? 3 : 6)
           .map(year => '<text x="' + x(year) + '" y="' + (height - 31) + '" text-anchor="middle">' + year + '</text>')
           .join('') +
         '<text x="' +
@@ -5434,7 +5465,7 @@
         (height - 5) +
         '" text-anchor="middle">退休年度</text></g></svg>',
       '<label class="mc-fan-year"><span>查看退休年度</span><input id="mc-asset-year" type="range" min="1" max="' +
-        HORIZON_YEARS +
+        horizonYears +
         '" step="1" value="' +
         mcAssetYear +
         '" /></label>',
@@ -5445,7 +5476,7 @@
       '<div id="mc-asset-distribution"></div>',
     );
     const updateYear = year => {
-      mcAssetYear = Math.max(1, Math.min(HORIZON_YEARS, Math.round(year)));
+      mcAssetYear = Math.max(1, Math.min(horizonYears, Math.round(year)));
       const point = points[mcAssetYear - 1];
       $('#mc-asset-year').value = mcAssetYear;
       const guide = $('#mc-fan-guide');
@@ -5472,11 +5503,10 @@
       const year = Math.max(
         1,
         Math.min(
-          HORIZON_YEARS,
+          horizonYears,
           Math.round(
             1 +
-              ((((event.clientX - box.left) / box.width) * width - left) / (width - left - right)) *
-                (HORIZON_YEARS - 1),
+              ((((event.clientX - box.left) / box.width) * width - left) / (width - left - right)) * (horizonYears - 1),
           ),
         ),
       );
@@ -5739,6 +5769,7 @@
   }
   function renderMonteCarloComparison(root, comparison) {
     const baselineName = nameHtml(comparison.profiles[0].name);
+    const horizonYears = comparison.horizonYears ?? comparison.profiles[0].result.horizonYears;
     const rate = value => percent(value * 100);
     root.className = 'monte-carlo-results';
     root.innerHTML = html(
@@ -5764,7 +5795,7 @@
       comparisonEventGapTable(comparison),
       '<div class="comparison-chart-tabs" role="tablist" aria-label="方案比較圖表">',
       '<button class="selected" role="tab" aria-selected="true" data-comparison-view="cagr">前 5 年 CAGR 十分位</button>',
-      '<button role="tab" aria-selected="false" data-comparison-view="trajectory">30 年資產軌跡</button></div>',
+      `<button role="tab" aria-selected="false" data-comparison-view="trajectory">${horizonYears} 年資產軌跡</button></div>`,
       '<section class="comparison-chart-panel" data-comparison-panel="cagr"><h3>核心 ETF 前 5 年 CAGR 十分位 vs 資產耗盡率</h3>',
       comparisonDecileChart(comparison),
       '<div class="table-wrap"><table><thead><tr><th>十分位</th><th>核心 ETF 前 5 年 CAGR</th><th>路徑數</th>',
@@ -5785,7 +5816,7 @@
           ? '通膨雖為隨機路徑，但橫軸只依市場報酬分組，所以這張圖不能當成完整的失敗原因分析。</p>'
           : '另外目前的抽樣 <b>不含隨機通膨</b>（每條路徑共用同一個通膨率），所以這張圖不能當成完整的失敗原因分析。</p>',
       '</section>',
-      '<section class="comparison-chart-panel" data-comparison-panel="trajectory" hidden><h3>30 年總資產軌跡</h3>',
+      `<section class="comparison-chart-panel" data-comparison-panel="trajectory" hidden><h3>${horizonYears} 年總資產軌跡</h3>`,
       '<p class="hint">每條線都是該方案全部 Monte Carlo 路徑在各年度的總資產分位數；破產後的年度計為 $0。</p>',
       comparisonTrajectoryChart(comparison),
       '</section>',
@@ -5889,7 +5920,8 @@
       ...comparison.profiles.flatMap(profile => profile.result.totalAssetTrajectory.map(year => year.p75)),
     );
     const colors = seriesColors;
-    const x = index => left + (index * (width - left - 16)) / (HORIZON_YEARS - 1);
+    const horizonYears = comparison.horizonYears ?? comparison.profiles[0].result.horizonYears;
+    const x = index => left + (index * (width - left - 16)) / Math.max(1, horizonYears - 1);
     const y = value => height - bottom - (value / maxValue) * (height - bottom - 18);
     const series = comparison.profiles.flatMap((profile, profileIndex) =>
       ['p25', 'p50', 'p75'].map(quantileLabel => ({
@@ -5907,10 +5939,11 @@
     );
     return html(
       '<div class="comparison-decile-chart comparison-trajectory-chart">',
-      `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="方案 A、B、C 各 P25、P50、P75 的三十年總資產軌跡">`,
+      `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="方案 A、B、C 各 P25、P50、P75 的 ${horizonYears} 年總資產軌跡">`,
       `<line x1="${left}" x2="${width - 16}" y1="${height - bottom}" y2="${height - bottom}" class="chart-axis"/>`,
       `<text x="2" y="20" class="chart-label">${money(maxValue, true)}</text><text x="22" y="${height - bottom}" class="chart-label">$0</text>`,
-      Array.from({ length: 7 }, (_, index) => index * 5)
+      axisYears(1, horizonYears, 6)
+        .map(year => year - 1)
         .map(
           index =>
             `<text x="${x(index)}" y="${height - 8}" text-anchor="middle" class="chart-label">${index + 1}</text>`,
@@ -5995,7 +6028,10 @@
       const included = state.monteCarloProfiles.filter(profile => profile.enabled !== false);
       const profiles = included;
       if (state.monteCarloComparisonEnabled && !profiles.length) throw new Error('請至少保留一個方案參與比較');
-      const runningPlan = primaryProfile.plan;
+      const runningPlan = {
+        ...primaryProfile.plan,
+        planningPeriod: { years: currentHorizonYears() },
+      };
       const result = await monteCarloRunner.run({
         comparison: state.monteCarloComparisonEnabled,
         profiles,

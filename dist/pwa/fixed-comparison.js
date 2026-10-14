@@ -5,7 +5,10 @@
     return source.monteCarloProfiles
       .filter(profile => profile.enabled !== false)
       .map(profile => {
-        const plan = sim.monteCarloPlanSnapshot(profile.plan);
+        const plan = {
+          ...sim.monteCarloPlanSnapshot(profile.plan),
+          planningPeriod: { years: sim.planningHorizonYears(source) },
+        };
         for (const key of ['coreReturns', 'inflationRates', 'emergencyEvents', 'safeRates']) {
           delete plan[key];
           if (source[key]) plan[key] = JSON.parse(JSON.stringify(source[key]));
@@ -26,7 +29,7 @@
         return { id: profile.id, name: profile.name, plan, result, firstCoreSale };
       });
   }
-  function historicalScenarioPath(config) {
+  function historicalScenarioPath(config, horizonYears = sim.HORIZON_YEARS) {
     if (
       !config ||
       !sim.HISTORICAL_MARKETS[config.market] ||
@@ -35,31 +38,37 @@
     )
       return null;
     const reverse = config.direction === 'reverse';
-    const coreReturns = sim.historicalReturnPath(config.market, config.startYear, sim.HORIZON_YEARS, reverse);
-    const inflationRates = sim.historicalInflationPath(config.market, config.startYear, sim.HORIZON_YEARS, reverse);
-    const safeRates = sim.historicalSafeRates(config.market, config.startYear, sim.HORIZON_YEARS, reverse);
+    const coreReturns = sim.historicalReturnPath(config.market, config.startYear, horizonYears, reverse);
+    const inflationRates = sim.historicalInflationPath(config.market, config.startYear, horizonYears, reverse);
+    const safeRates = sim.historicalSafeRates(config.market, config.startYear, horizonYears, reverse);
     if (!coreReturns || !inflationRates || (config.market === 'sp500' && !safeRates)) return null;
     return { coreReturns, inflationRates, ...(safeRates ? { safeRates } : {}) };
   }
-  function historicalScenarioStarts(market, direction) {
+  function historicalScenarioStarts(market, direction, horizonYears = sim.HORIZON_YEARS) {
     return Object.keys(sim.HISTORICAL_MARKETS[market]?.returns || {})
       .map(Number)
-      .filter(startYear => historicalScenarioPath({ market, direction, startYear }))
+      .filter(startYear => historicalScenarioPath({ market, direction, startYear }, horizonYears))
       .sort((a, b) => (direction === 'reverse' ? b - a : a - b));
   }
   function compareHistoricalScenarios(sourcePlan, configs) {
+    const horizonYears = sim.planningHorizonYears(sourcePlan);
     const active = configs.filter(config => config.enabled !== false);
     if (!active.length || active.length > 3) throw new Error('Select one to three scenarios');
     return active.map(config => {
-      const path = historicalScenarioPath(config);
+      const path = historicalScenarioPath(config, horizonYears);
       if (!path) throw new Error('Incomplete historical scenario');
       // A fresh plan snapshot removes all fixed/MC overrides and monthly residuals.
-      const plan = { ...sim.monteCarloPlanSnapshot(sourcePlan), ...path, emergencyEvents: {} };
+      const plan = {
+        ...sim.monteCarloPlanSnapshot(sourcePlan),
+        planningPeriod: { years: horizonYears },
+        ...path,
+        emergencyEvents: {},
+      };
       const result = sim.simulate(plan, 'historical');
       let priceIndex = 1;
       let floorGap = result.cumulativeFloorGap;
       const trajectory = [];
-      for (let index = 0; index < sim.HORIZON_YEARS; index++) {
+      for (let index = 0; index < horizonYears; index++) {
         if (index >= result.years.length) floorGap += (plan.spendingFloor?.annualAmount || 0) * priceIndex;
         priceIndex *= 1 + sim.inflationRateForYear(plan, index + 1) / 100;
         if (result.years[index])

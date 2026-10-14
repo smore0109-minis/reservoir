@@ -1,6 +1,7 @@
 (function () {
   const {
     HORIZON_YEARS,
+    planningHorizonYears,
     scenarios,
     DIVIDEND_ETF_PROFILES,
     DIVIDEND_SCENARIOS,
@@ -54,12 +55,12 @@
     gamma: '丙：緊急預備金 → 國債到期現金 → 核心 ETF；不售現金流 ETF 本金。',
     custom: '自訂：依下方手動排序支付意外支出。',
   };
-  function incomeSchedule(sources) {
+  function incomeSchedule(sources, horizonYears = HORIZON_YEARS) {
     const list = sources ?? [];
     if (!list.length) return [];
     const active = (source, year) =>
       year >= source.startYear && (source.endYear === null || source.endYear === undefined || year <= source.endYear);
-    const byYear = Array.from({ length: HORIZON_YEARS }, (_, index) =>
+    const byYear = Array.from({ length: horizonYears }, (_, index) =>
       list.reduce((sum, source) => (active(source, index + 1) ? sum + source.amount : sum), 0),
     );
     const segments = [];
@@ -71,8 +72,8 @@
     // 這件事會從畫面上消失。
     return segments[0] && segments[0].amount === 0 ? segments.slice(1) : segments;
   }
-  function incomeScheduleLabel(sources) {
-    const segments = incomeSchedule(sources);
+  function incomeScheduleLabel(sources, horizonYears = HORIZON_YEARS) {
+    const segments = incomeSchedule(sources, horizonYears);
     if (!segments.length) return '';
     const shown = segments
       .slice(0, 3)
@@ -80,6 +81,7 @@
     return `${shown.join(' · ')}${segments.length > 3 ? ' · …' : ''}／年（第 1 年幣值）`;
   }
   function monteCarloSettingsRows(result) {
+    const horizonYears = result.horizonYears ?? HORIZON_YEARS;
     if (result.profiles)
       return [
         [],
@@ -122,7 +124,7 @@
             [
               '通膨模型',
               `歷史壓力路徑：${INFLATION_STRESS_PATHS[result.inflationModel].label}`,
-              `每條路徑相同；30 年平均 ${percent(result.inflationAverage.p50)}；現金報酬取同年 3 個月國庫券平均、新買國債票息取同年 12 月 GS5`,
+              `每條路徑相同；${horizonYears} 年平均 ${percent(result.inflationAverage.p50)}；現金報酬取同年 3 個月國庫券平均、新買國債票息取同年 12 月 GS5`,
             ],
           ]
         : []),
@@ -144,9 +146,10 @@
             ],
           ]
         : []),
-      ['資產耗盡率', result.assetDepletionRate, `${HORIZON_YEARS} 年內資產歸零的路徑`],
+      ['規劃年數', horizonYears, '年'],
+      ['資產耗盡率', result.assetDepletionRate, `${horizonYears} 年內資產歸零的路徑`],
       ['生活費曾缺口率', result.spendShortfallRate, '至少一年未完全支應生活費'],
-      ['意外支出曾缺口率', result.eventGapRate ?? 0, '完整 30 年；耗盡後已排定事件視為未支應'],
+      ['意外支出曾缺口率', result.eventGapRate ?? 0, `完整 ${horizonYears} 年；耗盡後已排定事件視為未支應`],
       ['累計意外支出缺口 P50', result.cumulativeEventGap?.p50 ?? '', '僅曾有事件缺口路徑；名目金額'],
       ['累計意外支出缺口 P75', result.cumulativeEventGap?.p75 ?? '', '僅曾有事件缺口路徑；名目金額'],
       ['年末資產 P25', result.finalAssets.p25, ''],
@@ -166,6 +169,7 @@
     ];
   }
   function trajectoryCsv(years, bucketById, state, monteCarloResult = null) {
+    const horizonYears = monteCarloResult?.horizonYears ?? planningHorizonYears(state);
     const historicalSources = Array.isArray(state.historicalSampleSources) ? state.historicalSampleSources : null;
     const headers = [
       '年度',
@@ -302,6 +306,7 @@
     });
     const settings = [
       ['模擬設定', '數值', '說明'],
+      ['規劃年數', horizonYears, '年'],
       ['初始總資產', state.buckets.reduce((sum, bucket) => sum + bucket.amount, 0), '四個水庫合計'],
       ['首年全年生活費', state.annualSpend, '第 1 年'],
       ['首年必要生活費（Floor）', state.spendingFloor.annualAmount, '0 表示關閉；啟用時每年隨 CPI 成長'],
@@ -370,7 +375,7 @@
           ? monteCarloSettingsRows(monteCarloResult)
           : []),
       [],
-      [`${HORIZON_YEARS} 年提領軌跡`],
+      [`${horizonYears} 年提領軌跡`],
     ];
     const csv = [...settings, headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
     return csv;

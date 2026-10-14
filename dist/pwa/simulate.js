@@ -527,15 +527,15 @@
     us1966: Object.freeze({ label: '1966 年起美國 CPI（70 年代完整一輪）', startYear: 1966 }),
     us1973: Object.freeze({ label: '1973 年起美國 CPI（石油危機起）', startYear: 1973 }),
   });
-  function stressInflationPath(id) {
+  function stressInflationPath(id, length = HORIZON_YEARS) {
     const stress = Object.hasOwn(INFLATION_STRESS_PATHS, id) ? INFLATION_STRESS_PATHS[id] : null;
-    return stress ? historicalSeriesPath(US_CPI_DECEMBER_CHANGES, stress.startYear, HORIZON_YEARS) : null;
+    return stress ? historicalSeriesPath(US_CPI_DECEMBER_CHANGES, stress.startYear, length) : null;
   }
   // 壓力路徑同期的安全資產利率：緊急預備金與到期現金全年賺當年 3 個月國庫券平均；年末補梯新買的
   // 國債票息取當年 12 月 GS5（梯級是 1–5 年期的國債）。
-  function stressSafeRates(id) {
+  function stressSafeRates(id, length = HORIZON_YEARS) {
     const stress = Object.hasOwn(INFLATION_STRESS_PATHS, id) ? INFLATION_STRESS_PATHS[id] : null;
-    return stress ? historicalSafeRates('sp500', stress.startYear) : null;
+    return stress ? historicalSafeRates('sp500', stress.startYear, length) : null;
   }
   // normals[i] 是第 i+1 年的標準常態衝擊；上一期起點取中心，第 1 年即已帶衝擊。
   function inflationPath(center, normals) {
@@ -889,7 +889,7 @@
   };
   function clampTreasuryDrawdownYears(value, fallback = 0) {
     const number = Number(value);
-    return Number.isFinite(number) && number >= 0 && number <= HORIZON_YEARS ? Math.round(number) : fallback;
+    return Number.isFinite(number) && number >= 0 && number <= MAX_HORIZON_YEARS ? Math.round(number) : fallback;
   }
   // 梯長是最遠到期年，不是階數：1、2、10 年三階的梯子要補的是 10 年內的空期。
   // 以階數當梯長時，MC 編輯器新增一階會悄悄拉長補梯範圍，把到期年拉遠的那一階則永遠不會再補。
@@ -914,8 +914,8 @@
   // 保證性收入逐列的界線。與 SETTING_BOUNDS 同一個理由：遷移與即時輸入共用一份（K2）。
   const INCOME_BOUNDS = {
     amount: { min: 0 },
-    startYear: { min: 1, max: HORIZON_YEARS },
-    endYear: { min: 1, max: HORIZON_YEARS },
+    startYear: { min: 1, max: MAX_HORIZON_YEARS },
+    endYear: { min: 1, max: MAX_HORIZON_YEARS },
   };
   const INDEXATIONS = ['full', 'nominal'];
   function clampIncomeField(key, value, fallback = 0) {
@@ -941,7 +941,7 @@
           endYear:
             rawEnd === null || rawEnd === undefined || rawEnd === ''
               ? null
-              : clampIncomeField('endYear', rawEnd, HORIZON_YEARS),
+              : clampIncomeField('endYear', rawEnd, MAX_HORIZON_YEARS),
           indexation: INDEXATIONS.includes(source?.indexation) ? source.indexation : 'full',
         };
       })
@@ -980,7 +980,7 @@
       ? Number.isFinite(entry)
       : typeof entry === 'string' && entry.trim() !== '' && Number.isFinite(Number(entry));
   }
-  // 逐年安全資產利率：{ 年: { cash, coupon } }，兩個欄位都要是有限數字，年份限 1–30。
+  // 逐年安全資產利率：{ 年: { cash, coupon } }，兩個欄位都要是有限數字，年份保留至最大規劃期。
   function hydrateSafeRates(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     return Object.fromEntries(
@@ -989,7 +989,7 @@
           ([year, entry]) =>
             Number.isInteger(Number(year)) &&
             Number(year) >= 1 &&
-            Number(year) <= HORIZON_YEARS &&
+            Number(year) <= MAX_HORIZON_YEARS &&
             Number.isFinite(Number(entry?.cash)) &&
             Number.isFinite(Number(entry?.coupon)),
         )
@@ -1035,6 +1035,7 @@
     const fallback = cloneDefault();
     if (!stored || typeof stored !== 'object' || Array.isArray(stored) || stored.schemaVersion > DEFAULT.schemaVersion)
       return fallback;
+    const horizonYears = planningHorizonYears(stored);
     const sourceBuckets = Array.isArray(stored.buckets) ? stored.buckets : [];
     const buckets = DEFAULT.buckets.map(defaultBucket => {
       const source = sourceBuckets.find(bucket => bucket && bucket.id === defaultBucket.id) || {};
@@ -1074,7 +1075,7 @@
         coupon: 4,
       }))
     ).map((rung, index) => ({
-      maturityYear: Math.min(HORIZON_YEARS, Math.round(finiteNumber(rung?.maturityYear, index + 1, 1))),
+      maturityYear: Math.min(MAX_HORIZON_YEARS, Math.round(finiteNumber(rung?.maturityYear, index + 1, 1))),
       face: finiteNumber(rung?.face, defense.amount / rungCount, 0),
       coupon: finiteNumber(rung?.coupon, 4, 0),
     }));
@@ -1084,20 +1085,20 @@
       ? stored.incomeProfile.kind
       : null;
     const drawdownYears = clampTreasuryDrawdownYears(stored.treasury?.drawdownYears, 0);
-    const bxmMonthlyPath = hydrateBxmMonthlyPath(stored.bxmMonthlyPath);
+    const bxmMonthlyPath = hydrateBxmMonthlyPath(stored.bxmMonthlyPath, null, horizonYears);
     // Older representative paths did not identify which income ETF produced their residuals. The legacy
     // fixed plan still carries that strategy, so use it once during hydration and persist the explicit kind.
-    const incomeMonthlyPath = hydrateBxmMonthlyPath(stored.incomeMonthlyPath, incomeProfileKind);
+    const incomeMonthlyPath = hydrateBxmMonthlyPath(stored.incomeMonthlyPath, incomeProfileKind, horizonYears);
     const hydrated = {
       ...fallback,
       ...(stored.coverageTargets
         ? { coverageTargets: coverageTargets({ buckets, coverageTargets: stored.coverageTargets }) }
         : {}),
       schemaVersion: DEFAULT.schemaVersion,
-      planningPeriod: { years: planningHorizonYears(stored) },
+      planningPeriod: { years: horizonYears },
       // 載入路徑沒有地方顯示錯誤，超出界線的儲存值退回預設；即時輸入則夾住並立即顯示夾後的值。
       scenario: scenarios[stored.scenario] ? stored.scenario : fallback.scenario,
-      historicalReplay: hydrateHistoricalReplay(stored.historicalReplay),
+      historicalReplay: hydrateHistoricalReplay(stored.historicalReplay, horizonYears),
       annualSpend: finiteNumber(stored.annualSpend, fallback.annualSpend, SETTING_BOUNDS.annualSpend.min),
       ...(lockedInitialAssets(stored.lockedInitialAssets) !== null
         ? { lockedInitialAssets: lockedInitialAssets(stored.lockedInitialAssets) }
@@ -1129,8 +1130,8 @@
       )
         ? { representativePathSource: JSON.parse(JSON.stringify(stored.representativePathSource)) }
         : {}),
-      ...(hydrateHistoricalSampleSources(stored.historicalSampleSources)
-        ? { historicalSampleSources: hydrateHistoricalSampleSources(stored.historicalSampleSources) }
+      ...(hydrateHistoricalSampleSources(stored.historicalSampleSources, horizonYears)
+        ? { historicalSampleSources: hydrateHistoricalSampleSources(stored.historicalSampleSources, horizonYears) }
         : {}),
       // 代表路徑複製回固定情境頁時，BXM 必須帶著原本 12 個市場月報酬與 ETF 專屬殘差，
       // 否則只靠年報酬重建會把月頻非線性與殘差一起遺失，無法重播同一條路徑。
@@ -1225,17 +1226,17 @@
   // Monte Carlo 就是一個看不見的前提。日後新增同類欄位一併加入。
   // 記下來的窗口必須仍然產得出完整路徑，否則寧可當成沒套用過——留著一個指向不存在區間的
   // 標記，會讓「要不要清除逐年報酬」這個判斷永遠答錯。
-  function hydrateHistoricalReplay(stored) {
+  function hydrateHistoricalReplay(stored, horizonYears = HORIZON_YEARS) {
     const market = stored?.market;
     const startYear = Number(stored?.startYear);
     const reverse = stored?.direction === 'reverse';
-    if (!HISTORICAL_MARKETS[market] || !historicalReturnPath(market, startYear, HORIZON_YEARS, reverse)) return null;
+    if (!HISTORICAL_MARKETS[market] || !historicalReturnPath(market, startYear, horizonYears, reverse)) return null;
     return { market, startYear, ...(reverse ? { direction: 'reverse' } : {}) };
   }
-  // 這是「已複製的抽樣路徑」的稽核資料，不是另一種歷史回放。只有完整 30 年且每列都可
+  // 這是「已複製的抽樣路徑」的稽核資料，不是另一種歷史回放。只有完整規劃期且每列都可
   // 描述時才保留，避免 CSV 印出半套、無法追溯的來源欄位。
-  function hydrateHistoricalSampleSources(stored) {
-    if (!Array.isArray(stored) || stored.length !== HORIZON_YEARS) return null;
+  function hydrateHistoricalSampleSources(stored, horizonYears = HORIZON_YEARS) {
+    if (!Array.isArray(stored) || stored.length !== horizonYears) return null;
     const sources = stored.map(source => ({
       year: Math.round(Number(source?.year)),
       block: Math.round(Number(source?.block)),
@@ -1260,6 +1261,7 @@
     return Number.isFinite(amount) && amount >= 0 ? amount : null;
   }
   const SNAPSHOT_EXCLUDED = [
+    'planningPeriod',
     'safeRates',
     'monteCarlo',
     'monteCarloProfile',
@@ -1325,7 +1327,7 @@
     const year = Math.round(Number(value?.year));
     if (!(amount > 0) || !Number.isFinite(year)) return null;
     return {
-      year: Math.min(Math.max(year, 1), HORIZON_YEARS),
+      year: Math.min(Math.max(year, 1), MAX_HORIZON_YEARS),
       amount: Math.min(amount, MONTE_CARLO_BOUNDS.eventAmount.max),
     };
   }
@@ -1575,12 +1577,12 @@
       100
     );
   }
-  function hydrateBxmMonthlyPath(stored, fallbackKind = null) {
+  function hydrateBxmMonthlyPath(stored, fallbackKind = null, horizonYears = HORIZON_YEARS) {
     if (!stored || typeof stored !== 'object') return null;
     const read = key => {
       if (!stored[key] || typeof stored[key] !== 'object') return null;
       const values = {};
-      for (let year = 1; year <= HORIZON_YEARS; year += 1) {
+      for (let year = 1; year <= horizonYears; year += 1) {
         const months = stored[key][year];
         if (!Array.isArray(months) || months.length !== 12 || months.some(value => !Number.isFinite(Number(value))))
           return null;
