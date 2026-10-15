@@ -7,7 +7,7 @@
       .map(profile => {
         const plan = {
           ...sim.monteCarloPlanSnapshot(profile.plan),
-          planningPeriod: { years: sim.planningHorizonYears(source) },
+          planningPeriod: sim.planningPeriod(source),
         };
         for (const key of ['coreReturns', 'inflationRates', 'emergencyEvents', 'safeRates']) {
           delete plan[key];
@@ -60,7 +60,7 @@
       // A fresh plan snapshot removes all fixed/MC overrides and monthly residuals.
       const plan = {
         ...sim.monteCarloPlanSnapshot(sourcePlan),
-        planningPeriod: { years: horizonYears },
+        planningPeriod: sim.planningPeriod(sourcePlan),
         ...path,
         emergencyEvents: {},
       };

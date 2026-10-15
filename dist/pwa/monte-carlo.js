@@ -515,6 +515,7 @@
     return {
       ...settings,
       horizonYears,
+      planningPeriod: sim.planningPeriod(plan),
       paths: pathCount,
       scenario,
       floorActive,
@@ -574,13 +575,17 @@
     // 時，舊抽樣會被新設定貼錯標籤（年金已以 hasGuaranteedIncome 避開這個洞）。
     const plan = {
       ...(state.monteCarloProfile || state),
-      planningPeriod: { years: sim.planningHorizonYears(state) },
+      planningPeriod: sim.planningPeriod(state),
     };
     const horizonYears = sim.planningHorizonYears(plan);
+    const activeSettings =
+      settings.fixedEvent?.year > horizonYears
+        ? Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'fixedEvent'))
+        : settings;
     return runMonteCarloForPaths(
       plan,
-      settings,
-      generateSharedPathInputs(settings, plan.inflation, {
+      activeSettings,
+      generateSharedPathInputs(activeSettings, plan.inflation, {
         includeBxm: plan.growthProfile?.kind === 'bxm',
         incomeProfiles: [plan.incomeProfile?.kind],
         horizonYears,
@@ -595,28 +600,32 @@
       sim.clampMonteCarlo({ ...sim.DEFAULT.monteCarlo, ...state.monteCarlo, ...options }),
     );
     const horizonYears = sim.planningHorizonYears(state);
+    const activeSettings =
+      settings.fixedEvent?.year > horizonYears
+        ? Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'fixedEvent'))
+        : settings;
     const inflation = active[0].plan.inflation;
     const pathOptions = {
       includeBxm: active.some(profile => profile.plan.growthProfile?.kind === 'bxm'),
       incomeProfiles: active.map(profile => profile.plan.incomeProfile?.kind),
       horizonYears,
     };
-    const sharedPaths = generateSharedPathInputs(settings, inflation, pathOptions);
+    const sharedPaths = generateSharedPathInputs(activeSettings, inflation, pathOptions);
     // Reusing the seed and strategy set preserves market returns, event years and AR(1)
     // shocks. Each plan indexes spending/events with its own inflation assumption.
     // Historical CPI and stress sequences already specify inflation independently of plans.
     const fixedInflationPath =
-      settings.samplingMode === 'historical' || sim.INFLATION_STRESS_PATHS[settings.inflationModel];
+      activeSettings.samplingMode === 'historical' || sim.INFLATION_STRESS_PATHS[activeSettings.inflationModel];
     // enabled 只屬於 UI 的比較選擇，不能滲進結果快照；否則即使所有方案都啟用，新增這個
     // 控制欄位也會改變既有比較結果的結構／golden hash。
     const results = active.map(({ enabled, ...profile }) => ({
       ...profile,
       result: runMonteCarloForPaths(
-        { ...profile.plan, planningPeriod: { years: horizonYears } },
-        settings,
+        { ...profile.plan, planningPeriod: sim.planningPeriod(state) },
+        activeSettings,
         profile.plan.inflation === inflation || fixedInflationPath
           ? sharedPaths
-          : generateSharedPathInputs(settings, profile.plan.inflation, pathOptions),
+          : generateSharedPathInputs(activeSettings, profile.plan.inflation, pathOptions),
       ),
     }));
     const baseline = results[0];
@@ -649,8 +658,9 @@
       };
     });
     return {
-      ...settings,
+      ...activeSettings,
       horizonYears,
+      planningPeriod: sim.planningPeriod(state),
       sharedPaths,
       profiles: results,
       deciles,

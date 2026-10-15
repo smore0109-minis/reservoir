@@ -2443,6 +2443,36 @@ select:focus-visible {
 .shared-plan-selector select {
   width: auto;
 }
+.planning-period-settings {
+  align-items: end;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 1fr) 120px max-content 140px;
+  margin: 18px 0;
+  padding: 18px;
+}
+.planning-period-settings h3,
+.planning-period-settings p {
+  margin: 0;
+}
+.planning-period-settings .hint {
+  margin-top: 6px;
+}
+.planning-period-settings label {
+  margin: 0;
+}
+.planning-period-settings input {
+  margin-top: 6px;
+}
+.planning-period-arrow {
+  align-self: center;
+  color: var(--muted);
+  font-size: var(--fs-lg);
+  padding-top: 18px;
+}
 #single-plan-selector {
   border: 0;
   padding: 0;

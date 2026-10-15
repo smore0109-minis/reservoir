@@ -12,7 +12,10 @@
     HISTORICAL_MARKETS,
     historicalReturnPath,
     historicalInflationPath,
+    planningPeriod,
     planningHorizonYears,
+    MIN_CURRENT_AGE,
+    MAX_TARGET_AGE,
     simulate,
     eventFundingSummary,
     coverageTargets,
@@ -42,6 +45,7 @@
   const monteCarloRunner = window.RetirementWorkerClient.createMonteCarloRunner();
   let monteCarloGeneration = 0;
   let state = load();
+  const currentPlanningPeriod = () => planningPeriod(state);
   const currentHorizonYears = () => planningHorizonYears(state);
   const axisYears = (start, end, segments) => [
     ...new Set(
@@ -107,6 +111,10 @@
     '找不到相符內容，請換一個關鍵詞。': 'No matching content. Try another search term.',
     '如何解讀結果？': 'How should I read these results?',
     '多路徑模擬怎麼看？': 'How does Monte Carlo work?',
+    退休規劃年限: 'Retirement planning horizon',
+    目前年齡: 'Current age',
+    規劃到: 'Plan through',
+    歲: 'years old',
     明細檢視: 'Detail view',
     單一年度: 'Single year',
     完整年度列表: 'Full annual list',
@@ -1270,6 +1278,25 @@
     .sort((a, b) => b[0].length - a[0].length);
   function translateDynamicEnglish(source) {
     return source
+      .replace(
+        /從 (\d+) 歲規劃到 (\d+) 歲，共 (\d+) 年；固定情境、歷史回放與多路徑模擬共用。/g,
+        'Plan from age $1 through age $2 ($3 years). Fixed scenarios, historical replay, and Monte Carlo share this horizon.',
+      )
+      .replace(
+        /使用目前選定方案，檢查從 (\d+) 歲到 (\d+) 歲的 (\d+) 年資產與生活費。逐年路徑不帶入 MC。/g,
+        'Use the selected plan to evaluate assets and spending from age $1 through age $2 ($3 years). Annual fixed-scenario overrides do not carry into Monte Carlo.',
+      )
+      .replace(/(\d+) → (\d+) 歲 · (\d+) 年隨機路徑壓力測試/g, 'Ages $1–$2 · $3-year random-path stress test')
+      .replace(/套用 (\d+) 年歷史路徑/g, 'Apply $1-year historical path')
+      .replace(/資料僅 (\d+) 年/g, 'Only $1 years of data')
+      .replace(
+        /(.+?)只有 (\d+) 年完整資料，無法涵蓋 (\d+) 年規劃期；請縮短年限或改選其他市場。/g,
+        '$1 has only $2 complete years of data and cannot cover a $3-year horizon. Shorten the horizon or choose another market.',
+      )
+      .replace(/第 (\d+) 年（(\d+) 歲）停止時資產/g, 'Portfolio value at the Year $1 stop (age $2)')
+      .replace(/(\d+) 歲時預估資產/g, 'Projected assets at age $1')
+      .replace(/資產能否維持到 (\d+) 歲/g, 'Can assets last through age $1?')
+      .replace(/(\d+) → (\d+) 歲（(\d+) 年）/g, 'ages $1–$2 ($3 years)')
       .replace(/^方案 ([ABC])（基準）$/, 'Plan $1 (baseline)')
       .replace(
         /目標殖利率改為該檔樣本平均：VYM ([\d.]+%)（高於起始 ([\d.]+%)）、SCHD ([\d.]+%)（低於起始 ([\d.]+%)）。/g,
@@ -1516,12 +1543,12 @@
         'Each path has random inflation centered on the plan rate, with persistence $1 and annual shock standard deviation $2 percentage points (estimated from U.S. CPI, $3–$4; minimum $5%). This excludes 1970s-style inflation instability',
       )
       .replace(
-        /30 年平均通膨 P10／P50／P90 為 ([\d.−-]+%)／([\d.−-]+%)／([\d.−-]+%)。/g,
-        '30-year average inflation P10 / P50 / P90: $1 / $2 / $3. ',
+        /(\d+) 年平均通膨 P10／P50／P90 為 ([\d.−-]+%)／([\d.−-]+%)／([\d.−-]+%)。/g,
+        '$1-year average inflation P10 / P50 / P90: $2 / $3 / $4. ',
       )
       .replace(
-        /通膨採歷史壓力路徑：(.+?)，(\d+)–(\d+) 實際 12 月年增率，30 年平均 ([\d.]+%)、最高 ([\d.]+%)；每條路徑相同，市場報酬仍隨機。/g,
-        'Historical inflation stress scenario: $1, using actual December year-over-year CPI changes for $2–$3. The 30-year average is $4 and the maximum is $5. All paths share this inflation sequence; market returns remain random. ',
+        /通膨採歷史壓力路徑：(.+?)，(\d+)–(\d+) 實際 12 月年增率，(\d+) 年平均 ([\d.]+%)、最高 ([\d.]+%)；每條路徑相同，市場報酬仍隨機。/g,
+        'Historical inflation stress scenario: $1, using actual December year-over-year CPI changes for $2–$3. The $4-year average is $5 and the maximum is $6. All paths share this inflation sequence; market returns remain random. ',
       )
       .replace(
         /緊急預備金與到期現金改賺同年 3 個月國庫券平均（([\d.]+%)–([\d.]+%)），補梯新買的國債票息取同年 12 月五年期公債殖利率（GS5）。/g,
@@ -2138,6 +2165,7 @@
     }
   }
   function persist() {
+    renderPlanningPeriod();
     renderPlanContext();
     localStorage.setItem('retirement-reservoir', JSON.stringify(state));
   }
@@ -2270,7 +2298,7 @@
   function fixedSinglePlan() {
     const plan = {
       ...monteCarloPlanSnapshot(selectedProfile().plan),
-      planningPeriod: { years: currentHorizonYears() },
+      planningPeriod: currentPlanningPeriod(),
     };
     for (const key of ['coreReturns', 'inflationRates', 'emergencyEvents', 'safeRates', 'bxmMonthlyPath']) {
       delete plan[key];
@@ -2330,7 +2358,7 @@
       money(state.annualSpend) +
       ' · 必要生活費 ' +
       money(state.spendingFloor.annualAmount) +
-      ' · 規劃 30 年';
+      ` · ${currentPlanningPeriod().currentAge} → ${currentPlanningPeriod().targetAge} 歲（${currentHorizonYears()} 年）`;
     $('#main-plan-editor-label').textContent = '編輯我的計畫 · 配置、收入與提款規則';
     const targets = coverageTargets(state);
     $('#plan-rule-summary').textContent =
@@ -2358,6 +2386,20 @@
       ' 條 · 種子 ' +
       settings.seed +
       '（展開可查看及修改全部假設）';
+  }
+  function renderPlanningPeriod() {
+    const currentInput = $('#planning-current-age');
+    const targetInput = $('#planning-target-age');
+    if (!currentInput || !targetInput) return;
+    const period = currentPlanningPeriod();
+    currentInput.value = period.currentAge;
+    currentInput.min = MIN_CURRENT_AGE;
+    currentInput.max = period.targetAge - 1;
+    targetInput.value = period.targetAge;
+    targetInput.min = period.currentAge + 1;
+    targetInput.max = Math.min(MAX_TARGET_AGE, period.currentAge + 60);
+    $('#planning-period-summary').textContent =
+      `從 ${period.currentAge} 歲規劃到 ${period.targetAge} 歲，共 ${period.years} 年；固定情境、歷史回放與多路徑模擬共用。`;
   }
 
   function renderInputs() {
@@ -2430,6 +2472,17 @@
       const firstStart = Math.min(...years);
       const lastStart = Math.max(...years) - horizonYears + 1;
       const reverse = $('#historical-direction').value === 'reverse';
+      $('#apply-historical-path').textContent = `套用 ${horizonYears} 年歷史路徑`;
+      if (lastStart < firstStart) {
+        $('#historical-start').innerHTML = `<option>資料僅 ${years.length} 年</option>`;
+        $('#historical-start').disabled = true;
+        $('#apply-historical-path').disabled = true;
+        $('#historical-path-note').textContent =
+          `${HISTORICAL_MARKETS[market].label}只有 ${years.length} 年完整資料，無法涵蓋 ${horizonYears} 年規劃期；請縮短年限或改選其他市場。`;
+        return;
+      }
+      $('#historical-start').disabled = false;
+      $('#apply-historical-path').disabled = false;
       const starts = reverse
         ? Array.from({ length: lastStart - firstStart + 1 }, (_, index) => Math.max(...years) - index)
         : Array.from({ length: lastStart - firstStart + 1 }, (_, index) => firstStart + index);
@@ -2470,16 +2523,17 @@
       // 不完整的窗口會回 null。目前兩個序列的年份範圍相同所以選不到，但把 null 寫進
       // state.coreReturns 會讓下一次渲染整頁炸掉，不值得賭下一個市場也剛好對齊。
       const reverse = $('#historical-direction').value === 'reverse';
+      const horizonYears = currentHorizonYears();
       const path = historicalReturnPath(
         $('#historical-market').value,
         +$('#historical-start').value,
-        undefined,
+        horizonYears,
         reverse,
       );
       if (!path) return;
       const market = $('#historical-market').value;
       // 報酬與 CPI 同源同窗口，缺一不可；取不到 CPI 時寧可整個不套用，也不留下半套回放。
-      const inflationRates = historicalInflationPath(market, +$('#historical-start').value, undefined, reverse);
+      const inflationRates = historicalInflationPath(market, +$('#historical-start').value, horizonYears, reverse);
       if (!inflationRates) return;
       delete state.bxmMonthlyPath;
       delete state.incomeMonthlyPath;
@@ -2488,7 +2542,7 @@
       state.coreReturns = path;
       state.inflationRates = inflationRates;
       // 美國回放一併帶入同期 GS5 利率；其他市場沒有對應資料，維持固定利率。
-      const safeRates = historicalSafeRates(market, +$('#historical-start').value, undefined, reverse);
+      const safeRates = historicalSafeRates(market, +$('#historical-start').value, horizonYears, reverse);
       if (safeRates) state.safeRates = safeRates;
       else delete state.safeRates;
       // 報酬與 CPI 被歷史值取代之後，那條 Monte Carlo 路徑已經不存在了；它的隨機事件不該
@@ -3593,7 +3647,7 @@
     const host = $('#scenario-comparison-results');
     let results;
     try {
-      results = api.compareHistoricalScenarios({ ...plan, planningPeriod: { years: horizonYears } }, config.scenarios);
+      results = api.compareHistoricalScenarios({ ...plan, planningPeriod: currentPlanningPeriod() }, config.scenarios);
     } catch {
       host.innerHTML =
         '<p role="alert" class="scenario-comparison-error">' +
@@ -4139,6 +4193,9 @@
     renderDetail();
   }
   function renderScenario() {
+    const period = currentPlanningPeriod();
+    $('#fixed-single-description').textContent =
+      `使用目前選定方案，檢查從 ${period.currentAge} 歲到 ${period.targetAge} 歲的 ${period.years} 年資產與生活費。逐年路徑不帶入 MC。`;
     $('#fixed-comparison-enabled').checked = state.monteCarloComparisonEnabled;
     $('#fixed-comparison-help').hidden = !state.monteCarloComparisonEnabled;
     $('#fixed-single-description').hidden = state.monteCarloComparisonEnabled;
@@ -4268,7 +4325,9 @@
     );
     const shownYears = years.slice(projectionStart, projectionStart + 5);
     const rows = shownYears.map(y => renderProjectionRow(y, sourceName, bucketById, years, plan)).join('');
-    const assetCardLabel = bankruptYear ? `第 ${bankruptYear} 年停止時資產` : `${horizonYears} 年後預估資產`;
+    const assetCardLabel = bankruptYear
+      ? `第 ${bankruptYear} 年（${period.currentAge + bankruptYear} 歲）停止時資產`
+      : `${period.targetAge} 歲時預估資產`;
     const assetCard = html(
       `<article><span>${assetCardLabel}</span><strong>${money(last.total)}</strong>`,
       change === null
@@ -4368,7 +4427,7 @@
     const summaryOpen = $('#scenario-statistics')?.open;
     const headline =
       '<div class="result-headline">' +
-      `<article><small>資產能否維持 ${horizonYears} 年</small><strong>` +
+      `<article><small>資產能否維持到 ${period.targetAge} 歲</small><strong>` +
       (bankruptYear ? '第 ' + bankruptYear + ' 年耗盡' : '本情境未耗盡') +
       '</strong></article>' +
       '<article><small>累計實際／原始生活費計畫</small><strong>' +
@@ -5150,7 +5209,7 @@
     const path = sourceResult?.representativePaths?.[label];
     if (!path || !sourcePlan) return;
     const plan = JSON.parse(JSON.stringify(sourcePlan));
-    plan.planningPeriod = { years: sourceResult.horizonYears ?? currentHorizonYears() };
+    plan.planningPeriod = sourceResult.planningPeriod ?? currentPlanningPeriod();
     plan.coreReturns = Object.fromEntries(path.coreReturns.map((value, index) => [index + 1, value]));
     for (const key of ['inflationRates', 'safeRates', 'bxmMonthlyPath', 'incomeMonthlyPath'])
       if (path[key]) plan[key] = path[key];
@@ -5264,6 +5323,9 @@
   }
   function renderMonteCarlo() {
     const root = $('#monte-carlo-content');
+    const period = currentPlanningPeriod();
+    $('#monte-carlo-heading').textContent =
+      `${period.currentAge} → ${period.targetAge} 歲 · ${period.years} 年隨機路徑壓力測試`;
     if (!monteCarloResult) {
       root.className = 'monte-carlo-empty';
       root.textContent = monteCarloStale
@@ -6030,7 +6092,7 @@
       if (state.monteCarloComparisonEnabled && !profiles.length) throw new Error('請至少保留一個方案參與比較');
       const runningPlan = {
         ...primaryProfile.plan,
-        planningPeriod: { years: currentHorizonYears() },
+        planningPeriod: currentPlanningPeriod(),
       };
       const result = await monteCarloRunner.run({
         comparison: state.monteCarloComparisonEnabled,
@@ -6137,6 +6199,59 @@
     if (id) focusProfile(id);
   };
   $('#return-fixed-plan').onclick = () => setActiveView('planner-view');
+  function changePlanningAge(field, rawValue) {
+    const previous = currentPlanningPeriod();
+    const entered = Math.round(Number(rawValue));
+    let currentAge = previous.currentAge;
+    let targetAge = previous.targetAge;
+    if (field === 'currentAge') {
+      currentAge = Number.isFinite(entered)
+        ? Math.max(MIN_CURRENT_AGE, Math.min(entered, MAX_TARGET_AGE - 1))
+        : previous.currentAge;
+      targetAge = Math.max(currentAge + 1, Math.min(targetAge, currentAge + 60, MAX_TARGET_AGE));
+    } else {
+      targetAge = Number.isFinite(entered)
+        ? Math.max(currentAge + 1, Math.min(entered, currentAge + 60, MAX_TARGET_AGE))
+        : previous.targetAge;
+    }
+    const hadHistoricalReplay = Boolean(state.historicalReplay);
+    state = hydrateState({
+      ...state,
+      planningPeriod: { currentAge, targetAge, years: targetAge - currentAge },
+    });
+    if (hadHistoricalReplay) {
+      if (state.historicalReplay) {
+        const replay = state.historicalReplay;
+        const reverse = replay.direction === 'reverse';
+        state.coreReturns = historicalReturnPath(replay.market, replay.startYear, currentHorizonYears(), reverse);
+        state.inflationRates = historicalInflationPath(replay.market, replay.startYear, currentHorizonYears(), reverse);
+        const safeRates = historicalSafeRates(replay.market, replay.startYear, currentHorizonYears(), reverse);
+        if (safeRates) state.safeRates = safeRates;
+        else delete state.safeRates;
+      } else {
+        state.coreReturns = {};
+        state.inflationRates = {};
+        delete state.safeRates;
+      }
+      delete state.bxmMonthlyPath;
+      delete state.incomeMonthlyPath;
+      delete state.historicalSampleSources;
+    }
+    mcAssetYear = currentHorizonYears();
+    fixedComparisonYear = Math.min(fixedComparisonYear, currentHorizonYears());
+    scenarioComparisonYear = Math.min(scenarioComparisonYear, currentHorizonYears());
+    expandedYears.clear();
+    projectionStart = 0;
+    invalidateMonteCarlo();
+    renderInputs();
+    renderAll();
+    renderMonteCarloProfile();
+    renderMonteCarlo();
+    if (currentView === 'scenario-comparison-view') renderScenarioComparison();
+    applyLanguage();
+  }
+  $('#planning-current-age').onchange = event => changePlanningAge('currentAge', event.target.value);
+  $('#planning-target-age').onchange = event => changePlanningAge('targetAge', event.target.value);
   function changeSharedMode(enabled) {
     cancelProfileCopy();
     state.monteCarloComparisonEnabled = enabled;

@@ -1,6 +1,7 @@
 (function () {
   const {
     HORIZON_YEARS,
+    planningPeriod,
     planningHorizonYears,
     scenarios,
     DIVIDEND_ETF_PROFILES,
@@ -82,10 +83,18 @@
   }
   function monteCarloSettingsRows(result) {
     const horizonYears = result.horizonYears ?? HORIZON_YEARS;
+    const period = result.planningPeriod;
     if (result.profiles)
       return [
         [],
         ['Monte Carlo 方案比較', '數值', '說明'],
+        ...(period
+          ? [
+              ['目前年齡', period.currentAge, '歲'],
+              ['目標年齡', period.targetAge, '歲'],
+              ['規劃年數', period.years, '年'],
+            ]
+          : []),
         ['路徑數', result.paths, '所有方案共用核心 ETF 報酬、事件年份與第 1 年基準金額；實際金額依各方案通膨調整'],
         ['隨機種子', result.seed, '相同種子與設定必得相同結果'],
         ...result.profiles.map(profile => [
@@ -99,6 +108,12 @@
     return [
       [],
       ['Monte Carlo 假設', '數值', '說明'],
+      ...(period
+        ? [
+            ['目前年齡', period.currentAge, '歲'],
+            ['目標年齡', period.targetAge, '歲'],
+          ]
+        : []),
       ['路徑數', result.paths, ''],
       ['隨機種子', result.seed, '相同種子與設定必得相同結果'],
       ...(historical
@@ -170,6 +185,7 @@
   }
   function trajectoryCsv(years, bucketById, state, monteCarloResult = null) {
     const horizonYears = monteCarloResult?.horizonYears ?? planningHorizonYears(state);
+    const period = planningPeriod(state);
     const historicalSources = Array.isArray(state.historicalSampleSources) ? state.historicalSampleSources : null;
     const headers = [
       '年度',
@@ -306,6 +322,8 @@
     });
     const settings = [
       ['模擬設定', '數值', '說明'],
+      ['目前年齡', period.currentAge, '歲'],
+      ['目標年齡', period.targetAge, '歲'],
       ['規劃年數', horizonYears, '年'],
       ['初始總資產', state.buckets.reduce((sum, bucket) => sum + bucket.amount, 0), '四個水庫合計'],
       ['首年全年生活費', state.annualSpend, '第 1 年'],

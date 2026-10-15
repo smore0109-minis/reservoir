@@ -133,6 +133,26 @@
         <section class="panel">
           <h2>方案管理</h2>
           <p>固定情境與 MC 共用這裡的方案；編輯一次，兩邊都使用最新設定。市場路徑與抽樣假設仍各自設定。</p>
+          <section class="planning-period-settings" aria-labelledby="planning-period-title">
+            <div>
+              <p class="eyebrow">PLANNING HORIZON</p>
+              <h3 id="planning-period-title">退休規劃年限</h3>
+              <p id="planning-period-summary" class="hint"></p>
+            </div>
+            <label
+              >目前年齡
+              <input id="planning-current-age" type="number" min="18" max="119" step="1" inputmode="numeric" />
+            </label>
+            <span class="planning-period-arrow" aria-hidden="true">→</span>
+            <label
+              >規劃到
+              <span class="input-suffix"
+                ><input id="planning-target-age" type="number" min="19" max="120" step="1" inputmode="numeric" /><span
+                  >歲</span
+                ></span
+              >
+            </label>
+          </section>
           <details class="settings-fold" id="comparison-settings" open="">
             <summary id="comparison-settings-title">獨立比較方案 · 保留舊 A／B／C</summary>
             <div id="comparison-workspace" hidden="">
@@ -438,7 +458,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">MONTE CARLO</p>
-              <h2>30 年隨機路徑壓力測試</h2>
+              <h2 id="monte-carlo-heading">30 年隨機路徑壓力測試</h2>
               <button type="button" class="text-button" data-guide-topic="guide-隨機模擬與抽樣">
                 多路徑模擬怎麼看？
               </button>

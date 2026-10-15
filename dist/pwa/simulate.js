@@ -6,14 +6,19 @@
 (function () {
   const DEFAULT_HORIZON_YEARS = 30;
   const MAX_HORIZON_YEARS = 60;
+  const MIN_CURRENT_AGE = 18;
+  const MAX_TARGET_AGE = 120;
+  const DEFAULT_CURRENT_AGE = 60;
   // Legacy public name kept for UI, Monte Carlo and historical-replay consumers until their
   // variable-horizon work lands. New simulation code must use planningHorizonYears(state).
   const HORIZON_YEARS = DEFAULT_HORIZON_YEARS;
   const DEFAULT = {
     schemaVersion: 1,
-    // Phase 1 keeps the product at 30 years while making the simulation contract horizon-aware.
-    // A later UI phase will expose this shared planning-period setting.
-    planningPeriod: { years: DEFAULT_HORIZON_YEARS },
+    planningPeriod: {
+      currentAge: DEFAULT_CURRENT_AGE,
+      targetAge: DEFAULT_CURRENT_AGE + DEFAULT_HORIZON_YEARS,
+      years: DEFAULT_HORIZON_YEARS,
+    },
     // 固定情境頁選中的情境。不存的話重開會固定回到 base，而 coreReturns／inflationRates
     // 是存下來的——畫面說「基準」，模擬卻仍在跑歷史回放，歷史控制區還被藏起來。
     scenario: 'base',
@@ -875,9 +880,27 @@
     const number = Number(value);
     return Number.isFinite(number) && number >= minimum ? number : fallback;
   }
+  function planningPeriod(state) {
+    const source = state?.planningPeriod;
+    const currentAge = Math.round(Number(source?.currentAge));
+    const targetAge = Math.round(Number(source?.targetAge));
+    if (
+      Number.isFinite(currentAge) &&
+      Number.isFinite(targetAge) &&
+      currentAge >= MIN_CURRENT_AGE &&
+      targetAge <= MAX_TARGET_AGE &&
+      targetAge > currentAge &&
+      targetAge - currentAge <= MAX_HORIZON_YEARS
+    )
+      return { currentAge, targetAge, years: targetAge - currentAge };
+    const rawYears = Math.round(Number(source?.years));
+    const years =
+      Number.isFinite(rawYears) && rawYears >= 1 && rawYears <= MAX_HORIZON_YEARS ? rawYears : DEFAULT_HORIZON_YEARS;
+    const fallbackCurrentAge = Math.min(DEFAULT_CURRENT_AGE, MAX_TARGET_AGE - years);
+    return { currentAge: fallbackCurrentAge, targetAge: fallbackCurrentAge + years, years };
+  }
   function planningHorizonYears(state) {
-    const years = Math.round(Number(state?.planningPeriod?.years));
-    return Number.isFinite(years) && years >= 1 && years <= MAX_HORIZON_YEARS ? years : DEFAULT_HORIZON_YEARS;
+    return planningPeriod(state).years;
   }
   // 設定欄位的界線只定義一次，遷移與即時輸入共用。這個專案在「載入路徑有守、即時輸入沒守」
   // 上踩過三次（熊市門檻、護欄區間、負數），逐欄位各寫一份界線就是第四次的溫床。
@@ -1035,7 +1058,8 @@
     const fallback = cloneDefault();
     if (!stored || typeof stored !== 'object' || Array.isArray(stored) || stored.schemaVersion > DEFAULT.schemaVersion)
       return fallback;
-    const horizonYears = planningHorizonYears(stored);
+    const period = planningPeriod(stored);
+    const horizonYears = period.years;
     const sourceBuckets = Array.isArray(stored.buckets) ? stored.buckets : [];
     const buckets = DEFAULT.buckets.map(defaultBucket => {
       const source = sourceBuckets.find(bucket => bucket && bucket.id === defaultBucket.id) || {};
@@ -1095,7 +1119,7 @@
         ? { coverageTargets: coverageTargets({ buckets, coverageTargets: stored.coverageTargets }) }
         : {}),
       schemaVersion: DEFAULT.schemaVersion,
-      planningPeriod: { years: horizonYears },
+      planningPeriod: period,
       // 載入路徑沒有地方顯示錯誤，超出界線的儲存值退回預設；即時輸入則夾住並立即顯示夾後的值。
       scenario: scenarios[stored.scenario] ? stored.scenario : fallback.scenario,
       historicalReplay: hydrateHistoricalReplay(stored.historicalReplay, horizonYears),
@@ -2213,6 +2237,7 @@
     }
     return {
       horizonYears,
+      planningPeriod: planningPeriod(state),
       years,
       plannedSpendTotal,
       spendShortfall,
@@ -2261,6 +2286,9 @@
     DEFAULT,
     DEFAULT_HORIZON_YEARS,
     MAX_HORIZON_YEARS,
+    MIN_CURRENT_AGE,
+    MAX_TARGET_AGE,
+    planningPeriod,
     planningHorizonYears,
     scenarios,
     SCENARIO_CORE_RETURN_PATHS,
