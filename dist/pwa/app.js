@@ -140,6 +140,7 @@
     情境資產走勢: 'Assets across scenarios',
     台灣加權: 'Taiwan TAIEX',
     '日經 225': 'Nikkei 225',
+    '英國 FTSE 100': 'UK FTSE 100',
     參與情境比較: 'Include this scenario',
     '正放（最早年先）': 'Forward (earliest first)',
     歷史期間: 'Historical period',
@@ -597,6 +598,11 @@
     ],
     ['日經 225 價格報酬（不含股息）', 'Nikkei 225 price return (excluding dividends)'],
     ['加權股價指數 價格報酬（不含股息）', 'Taiwan SE Weighted Index price return (excluding dividends)'],
+    ['FTSE 100 價格報酬（不含股息）', 'FTSE 100 price return (excluding dividends)'],
+    [
+      'FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
+      'FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years.',
+    ],
     [
       '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
       'Taiwan SE Weighted Index complete calendar-year price returns (excluding dividends; Taiwan’s high dividend yield makes the omission more material than for the Nikkei); paired with Taiwan CPI (annual-average year-over-year change).',
@@ -615,6 +621,8 @@
     ['亞洲金融風暴', 'Asian financial crisis'],
     ['金融危機', 'Financial crisis'],
     ['東日本大震災', 'Great East Japan Earthquake'],
+    ['黑色星期一', 'Black Monday'],
+    ['COVID-19 疫情', 'COVID-19 pandemic'],
     ['生活費先使用配息', 'Use dividends for spending first'],
     ['意外支出：', 'Unexpected expenses: '],
     ['補水目標：', 'Replenishment target: '],
@@ -3501,7 +3509,7 @@
     const plan = profile.plan;
     const horizonYears = currentHorizonYears();
     scenarioComparisonYear = Math.min(scenarioComparisonYear, horizonYears);
-    const names = { sp500: 'S&P 500', taiwan: '台灣加權', nikkei: '日經 225' };
+    const names = { sp500: 'S&P 500', taiwan: '台灣加權', nikkei: '日經 225', ftse: '英國 FTSE 100' };
     // 三張卡可以選到完全相同的市場／年份／方向，編號讓圖例、表頭與明細仍能對應。
     const tag = item => '<span>情境</span> ' + item.id.slice(1) + ' · ';
     const label = item =>

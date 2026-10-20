@@ -82,7 +82,7 @@
             !comparison.scenarios.every(
               item =>
                 item &&
-                ['sp500', 'taiwan', 'nikkei'].includes(item.market) &&
+                ['sp500', 'taiwan', 'nikkei', 'ftse'].includes(item.market) &&
                 ['forward', 'reverse'].includes(item.direction) &&
                 Number.isInteger(item.startYear) &&
                 typeof item.enabled === 'boolean',
