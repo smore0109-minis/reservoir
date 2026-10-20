@@ -141,6 +141,7 @@
     台灣加權: 'Taiwan TAIEX',
     '日經 225': 'Nikkei 225',
     '英國 FTSE 100': 'UK FTSE 100',
+    '韓國 KOSPI': 'South Korea KOSPI',
     參與情境比較: 'Include this scenario',
     '正放（最早年先）': 'Forward (earliest first)',
     歷史期間: 'Historical period',
@@ -599,9 +600,14 @@
     ['日經 225 價格報酬（不含股息）', 'Nikkei 225 price return (excluding dividends)'],
     ['加權股價指數 價格報酬（不含股息）', 'Taiwan SE Weighted Index price return (excluding dividends)'],
     ['FTSE 100 價格報酬（不含股息）', 'FTSE 100 price return (excluding dividends)'],
+    ['KOSPI 價格報酬（不含股息）', 'KOSPI price return (excluding dividends)'],
     [
       'FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
       'FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years.',
+    ],
+    [
+      'KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。',
+      'KOSPI complete calendar-year price returns from its base date (excluding dividends), paired with South Korea CPI (annual-average inflation). The 1980 return starts from the KRX base value of 100; no pre-launch proxy is used.',
     ],
     [
       '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
@@ -3509,7 +3515,13 @@
     const plan = profile.plan;
     const horizonYears = currentHorizonYears();
     scenarioComparisonYear = Math.min(scenarioComparisonYear, horizonYears);
-    const names = { sp500: 'S&P 500', taiwan: '台灣加權', nikkei: '日經 225', ftse: '英國 FTSE 100' };
+    const names = {
+      sp500: 'S&P 500',
+      taiwan: '台灣加權',
+      nikkei: '日經 225',
+      ftse: '英國 FTSE 100',
+      kospi: '韓國 KOSPI',
+    };
     // 三張卡可以選到完全相同的市場／年份／方向，編號讓圖例、表頭與明細仍能對應。
     const tag = item => '<span>情境</span> ' + item.id.slice(1) + ' · ';
     const label = item =>
