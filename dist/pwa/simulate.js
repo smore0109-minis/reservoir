@@ -1064,22 +1064,22 @@
       note: '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
     },
     ftse: {
-      label: 'FTSE 100 價格報酬（不含股息）',
+      label: '英國 FTSE 100 價格報酬（不含股息）',
       returns: FTSE_100_PRICE_RETURNS,
       cpi: Object.freeze(
         Object.fromEntries(Object.entries(UK_CPI_ANNUAL_CHANGES).filter(([year]) => Number(year) >= 1984)),
       ),
       events: FTSE_MARKET_EVENTS,
-      note: 'FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
+      note: '英國 FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
     },
     kospi: {
-      label: 'KOSPI 價格報酬（不含股息）',
+      label: '韓國 KOSPI 價格報酬（不含股息）',
       returns: KOSPI_PRICE_RETURNS,
       cpi: Object.freeze(
         Object.fromEntries(Object.entries(KOREA_CPI_ANNUAL_CHANGES).filter(([year]) => Number(year) >= 1980)),
       ),
       events: KOSPI_MARKET_EVENTS,
-      note: 'KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。',
+      note: '韓國 KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。',
     },
   });
   // 任一年缺值就整段作廢：半段歷史、半段推測的路徑比沒有路徑更難察覺。

@@ -599,15 +599,15 @@
     ],
     ['日經 225 價格報酬（不含股息）', 'Nikkei 225 price return (excluding dividends)'],
     ['加權股價指數 價格報酬（不含股息）', 'Taiwan SE Weighted Index price return (excluding dividends)'],
-    ['FTSE 100 價格報酬（不含股息）', 'FTSE 100 price return (excluding dividends)'],
-    ['KOSPI 價格報酬（不含股息）', 'KOSPI price return (excluding dividends)'],
+    ['英國 FTSE 100 價格報酬（不含股息）', 'UK FTSE 100 price return (excluding dividends)'],
+    ['韓國 KOSPI 價格報酬（不含股息）', 'South Korea KOSPI price return (excluding dividends)'],
     [
-      'FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
-      'FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years.',
+      '英國 FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。',
+      'UK FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years.',
     ],
     [
-      'KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。',
-      'KOSPI complete calendar-year price returns from its base date (excluding dividends), paired with South Korea CPI (annual-average inflation). The 1980 return starts from the KRX base value of 100; no pre-launch proxy is used.',
+      '韓國 KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。',
+      'South Korea KOSPI complete calendar-year price returns from its base date (excluding dividends), paired with South Korea CPI (annual-average inflation). The 1980 return starts from the KRX base value of 100; no pre-launch proxy is used.',
     ],
     [
       '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
@@ -1292,6 +1292,14 @@
     .sort((a, b) => b[0].length - a[0].length);
   function translateDynamicEnglish(source) {
     return source
+      .replace(
+        /英國 FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。/g,
+        'UK FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years. ',
+      )
+      .replace(
+        /韓國 KOSPI 自基準日起的完整曆年價格報酬（不含股息）；同步套用同年韓國 CPI（全年平均年增率）。1980 年以 KRX 基準值 100 起算，未使用成立前代理資料。/g,
+        'South Korea KOSPI complete calendar-year price returns from its base date (excluding dividends), paired with South Korea CPI (annual-average inflation). The 1980 return starts from the KRX base value of 100; no pre-launch proxy is used. ',
+      )
       .replace(
         /從 (\d+) 歲規劃到 (\d+) 歲，共 (\d+) 年；固定情境、歷史回放與多路徑模擬共用。/g,
         'Plan from age $1 through age $2 ($3 years). Fixed scenarios, historical replay, and Monte Carlo share this horizon.',
