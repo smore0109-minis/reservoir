@@ -1,1 +1,1 @@
-window.pwaVersion = "10.2.1";
+window.pwaVersion = "10.2.2";

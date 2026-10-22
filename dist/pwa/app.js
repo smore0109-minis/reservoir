@@ -138,8 +138,9 @@
     比較使用的計畫: 'Plan for scenario comparison',
     前往方案管理: 'Open plan manager',
     情境資產走勢: 'Assets across scenarios',
-    台灣加權: 'Taiwan TAIEX',
-    '日經 225': 'Nikkei 225',
+    '美國 S&P 500': 'U.S. S&P 500',
+    '台灣 加權股價指數': 'Taiwan TAIEX',
+    '日本 日經 225': 'Japan Nikkei 225',
     '英國 FTSE 100': 'UK FTSE 100',
     '韓國 KOSPI': 'South Korea KOSPI',
     參與情境比較: 'Include this scenario',
@@ -597,8 +598,9 @@
       '完整曆年 Total Return（含股息再投資）；同步套用同年 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。共 30 年路徑。',
       'Complete calendar-year Total Return (with dividends reinvested); apply the same-year CPI-U (December year-over-year change), use the same-year 3-month Treasury-bill average for the emergency reserve and maturity cash, and the same-year December five-year Treasury yield (GS5) for new Treasury coupons. 30 paths total.',
     ],
-    ['日經 225 價格報酬（不含股息）', 'Nikkei 225 price return (excluding dividends)'],
-    ['加權股價指數 價格報酬（不含股息）', 'Taiwan SE Weighted Index price return (excluding dividends)'],
+    ['美國 S&P 500 Total Return（含股息）', 'U.S. S&P 500 total return (including dividends)'],
+    ['日本 日經 225 價格報酬（不含股息）', 'Japan Nikkei 225 price return (excluding dividends)'],
+    ['台灣 加權股價指數 價格報酬（不含股息）', 'Taiwan TAIEX price return (excluding dividends)'],
     ['英國 FTSE 100 價格報酬（不含股息）', 'UK FTSE 100 price return (excluding dividends)'],
     ['韓國 KOSPI 價格報酬（不含股息）', 'South Korea KOSPI price return (excluding dividends)'],
     [
@@ -610,8 +612,8 @@
       'South Korea KOSPI complete calendar-year price returns from its base date (excluding dividends), paired with South Korea CPI (annual-average inflation). The 1980 return starts from the KRX base value of 100; no pre-launch proxy is used.',
     ],
     [
-      '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
-      'Taiwan SE Weighted Index complete calendar-year price returns (excluding dividends; Taiwan’s high dividend yield makes the omission more material than for the Nikkei); paired with Taiwan CPI (annual-average year-over-year change).',
+      '台灣 加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
+      'Taiwan TAIEX complete calendar-year price returns (excluding dividends; Taiwan’s high dividend yield makes the omission more material than for the Nikkei); paired with Taiwan CPI (annual-average year-over-year change).',
     ],
     ['現金 / MMF', 'Cash / MMF'],
     ['現金／MMF', 'Cash / MMF'],
@@ -1036,9 +1038,8 @@
     情境下的資產續航: 'Portfolio Longevity by Scenario',
     牛市: 'Bull Market',
     熊市: 'Bear Market',
-    'S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。共 30 年路徑。':
-      'S&P 500 calendar-year total returns, including reinvested dividends, paired with CPI-U (December year-over-year inflation). Cash earns the same-year average 3-month Treasury bill rate; new Treasury coupons use the same-year December 5-year Treasury yield (GS5). One 30-year path.',
-    'S&P 500 Total Return（含股息）': 'S&P 500 total return (including dividends)',
+    '美國 S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年美國 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。共 30 年路徑。':
+      'U.S. S&P 500 calendar-year total returns, including reinvested dividends, paired with U.S. CPI-U (December year-over-year inflation). Cash earns the same-year average 3-month Treasury bill rate; new Treasury coupons use the same-year December 5-year Treasury yield (GS5). One 30-year path.',
     '累計實際／原始生活費計畫': 'Cumulative actual / planned spending',
     曾有缺口: 'Shortfall occurred',
     投資組合耗盡: 'Portfolio depleted',
@@ -1123,8 +1124,8 @@
       'Bear market: replay the 2000–2002 decline and the 2003–2004 recovery, then revert to the long-term average. The core ETF sale restriction limits sales at depressed prices.',
     '歷史回放：核心報酬與 CPI 依所選市場的完整歷史年度回放；其餘水庫沿用基準假設。':
       'Historical replay: core returns and inflation use full calendar-year data from the selected market. Other buckets use the base-case assumptions.',
-    '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。共 30 年路徑。':
-      'Taiwan SE Weighted Index calendar-year price returns (excluding dividends), paired with Taiwan CPI (annual-average inflation). Omitting dividends understates total returns, more materially than for the Nikkei given Taiwan’s higher dividend yield. One 30-year path.',
+    '台灣 加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。共 30 年路徑。':
+      'Taiwan TAIEX calendar-year price returns (excluding dividends), paired with Taiwan CPI (annual-average inflation). Omitting dividends understates total returns, more materially than for the Nikkei given Taiwan’s higher dividend yield. One 30-year path.',
     '依首年生活費與參考配發率估算，未來配息不保證達標。套用後的初始配置：':
       'Estimated from first-year spending and the reference distribution rate; future distributions are not guaranteed. Proposed initial allocation:',
     套用初始配置: 'Apply Initial Allocation',
@@ -1225,10 +1226,10 @@
     比較模式至少需要一個方案: 'Include at least one plan in the comparison.',
     '比較模式 v1 要求所有方案使用相同通膨率，才能共用意外支出金額':
       'Comparison plans must use the same inflation rate to share unexpected-expense amounts. Set the shared inflation rate before running the comparison.',
-    '日經 225 完整曆年價格報酬（不含股息）；同步套用同年日本 CPI（全年平均年增率）。':
-      'Nikkei 225 calendar-year price returns (excluding dividends), paired with Japanese CPI (annual-average inflation). ',
-    'S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。':
-      'S&P 500 calendar-year total returns (including reinvested dividends), paired with CPI-U (December year-over-year inflation). Cash earns the same-year average 3-month Treasury bill rate; new Treasury coupons use the same-year December 5-year Treasury yield (GS5). ',
+    '日本 日經 225 完整曆年價格報酬（不含股息）；同步套用同年日本 CPI（全年平均年增率）。':
+      'Japan Nikkei 225 calendar-year price returns (excluding dividends), paired with Japanese CPI (annual-average inflation). ',
+    '美國 S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年美國 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。':
+      'U.S. S&P 500 calendar-year total returns (including reinvested dividends), paired with U.S. CPI-U (December year-over-year inflation). Cash earns the same-year average 3-month Treasury bill rate; new Treasury coupons use the same-year December 5-year Treasury yield (GS5). ',
     '倒放會同時反轉報酬、CPI 與（美國）利率的年度順序；這是合成序列風險壓力測試，不是真實歷史。':
       'Reverse replay reverses the annual order of returns, CPI, and U.S. interest rates together. This is a synthetic sequence-of-returns stress scenario, not actual history. ',
     'Floor 未限制護欄': 'The spending floor did not constrain guardrail adjustments',
@@ -1292,6 +1293,18 @@
     .sort((a, b) => b[0].length - a[0].length);
   function translateDynamicEnglish(source) {
     return source
+      .replace(
+        /美國 S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年美國 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。/g,
+        'U.S. S&P 500 complete calendar-year total returns (including reinvested dividends), paired with U.S. CPI-U (December year-over-year inflation). Cash earns the same-year average 3-month Treasury bill rate; new Treasury coupons use the same-year December 5-year Treasury yield (GS5). ',
+      )
+      .replace(
+        /日本 日經 225 完整曆年價格報酬（不含股息）；同步套用同年日本 CPI（全年平均年增率）。/g,
+        'Japan Nikkei 225 complete calendar-year price returns (excluding dividends), paired with Japan CPI (annual-average inflation). ',
+      )
+      .replace(
+        /台灣 加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。/g,
+        'Taiwan TAIEX complete calendar-year price returns (excluding dividends; omitting Taiwan’s high dividend yield materially understates total return), paired with Taiwan CPI (annual-average inflation). ',
+      )
       .replace(
         /英國 FTSE 100 自成立以來的完整曆年價格報酬（不含股息）；同步套用同年英國 CPI（全年平均年增率）。指數於 1984 年啟用，未以其他指數回填成立前資料。/g,
         'UK FTSE 100 complete calendar-year price returns since inception (excluding dividends), paired with UK CPI (annual-average inflation). The index launched in 1984; no other index is used to backfill pre-launch years. ',
@@ -3524,9 +3537,9 @@
     const horizonYears = currentHorizonYears();
     scenarioComparisonYear = Math.min(scenarioComparisonYear, horizonYears);
     const names = {
-      sp500: 'S&P 500',
-      taiwan: '台灣加權',
-      nikkei: '日經 225',
+      sp500: '美國 S&P 500',
+      taiwan: '台灣 加權股價指數',
+      nikkei: '日本 日經 225',
       ftse: '英國 FTSE 100',
       kospi: '韓國 KOSPI',
     };

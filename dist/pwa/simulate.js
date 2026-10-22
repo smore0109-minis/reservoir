@@ -1043,25 +1043,25 @@
   // 通膨而畫面仍寫著「歷史回放」。合併成一份之後，漏掉一半在結構上就不可能發生。
   const HISTORICAL_MARKETS = Object.freeze({
     sp500: {
-      label: 'S&P 500 Total Return（含股息）',
+      label: '美國 S&P 500 Total Return（含股息）',
       returns: SP500_TOTAL_RETURNS,
       cpi: US_CPI_DECEMBER_CHANGES,
       events: SP500_MARKET_EVENTS,
-      note: 'S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。',
+      note: '美國 S&P 500 完整曆年 Total Return（含股息再投資）；同步套用同年美國 CPI-U（12 月年增率），緊急預備金與到期現金賺同年 3 個月國庫券利率平均、新買國債票息取同年 12 月五年期公債殖利率（GS5）。',
     },
     nikkei: {
-      label: '日經 225 價格報酬（不含股息）',
+      label: '日本 日經 225 價格報酬（不含股息）',
       returns: NIKKEI_225_PRICE_RETURNS,
       cpi: JAPAN_CPI_ANNUAL_CHANGES,
       events: NIKKEI_MARKET_EVENTS,
-      note: '日經 225 完整曆年價格報酬（不含股息）；同步套用同年日本 CPI（全年平均年增率）。',
+      note: '日本 日經 225 完整曆年價格報酬（不含股息）；同步套用同年日本 CPI（全年平均年增率）。',
     },
     taiwan: {
-      label: '加權股價指數 價格報酬（不含股息）',
+      label: '台灣 加權股價指數 價格報酬（不含股息）',
       returns: TAIEX_PRICE_RETURNS,
       cpi: TAIWAN_CPI_ANNUAL_CHANGES,
       events: TAIEX_MARKET_EVENTS,
-      note: '加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
+      note: '台灣 加權股價指數完整曆年價格報酬（不含股息，台股殖利率高，低估幅度大於日經）；同步套用同年台灣 CPI（全年平均年增率）。',
     },
     ftse: {
       label: '英國 FTSE 100 價格報酬（不含股息）',
