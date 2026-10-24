@@ -1448,8 +1448,8 @@
         'Market: $1, using its annual data (mean $2; standard deviation $3). ',
       )
       .replace(
-        /ETF 使用保留年度複利的合成分層月路徑，非真實歷史月資料；每段 (\d+) 年、不重複來源年份，年度擾動 ±([\d.]+)%；種子 (\d+)。/g,
-        'ETF models use synthetic monthly paths that preserve annual compounded returns, not actual historical monthly observations. Blocks contain $1 years, without repeated source years; annual return perturbation ±$2 percentage points; seed $3. ',
+        /ETF 使用保留年度複利的合成分層月路徑，非真實歷史月資料；每段最多 (\d+) 年、不重複來源年份，年度擾動 ±([\d.]+)%；種子 (\d+)。/g,
+        'ETF models use synthetic monthly paths that preserve annual compounded returns, not actual historical monthly observations. Blocks contain at most $1 years, without repeated source years; annual return perturbation ±$2 percentage points; seed $3. ',
       )
       .replace(
         /每年另以 ([\d.]+%) 的獨立機率發生意外支出；基準值 (\$[\d,]+)（第 1 年美元），其後依年通膨調整。/g,
@@ -5241,7 +5241,7 @@
     return html(
       `${result.paths.toLocaleString()} 條合成歷史路徑，非真實歷史回放；`,
       `市場為「${market.label}」，直接採其年度資料（平均 ${percent(result.historicalStats.mean)}、波動率 ${percent(result.historicalStats.volatility)}），`,
-      `ETF 使用保留年度複利的合成分層月路徑，非真實歷史月資料；每段 ${result.historicalBlockLength} 年、不重複來源年份，年度擾動 ±${result.historicalJitter}%；種子 ${result.seed}。`,
+      `ETF 使用保留年度複利的合成分層月路徑，非真實歷史月資料；每段最多 ${result.historicalBlockLength} 年、不重複來源年份，年度擾動 ±${result.historicalJitter}%；種子 ${result.seed}。`,
     );
   }
   function viewRepresentativePath(label, resultOverride = null, planOverride = null, profileName = '') {

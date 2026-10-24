@@ -120,7 +120,11 @@
         ? [
             ['抽樣方式', '歷史區塊抽樣', '合成歷史路徑，非真實歷史回放'],
             ['歷史市場', market.label, market.note],
-            ['區塊長度', result.historicalBlockLength, '同一區塊內為原始資料連續曆年；同一路徑不重複來源年份'],
+            [
+              '區塊長度',
+              result.historicalBlockLength,
+              '最大年數；邊界區塊可較短，同一區塊內為連續曆年，同一路徑不重複來源年份',
+            ],
             ['年度擾動上限', result.historicalJitter / 100, '同一年度的核心報酬與 CPI 共用同一個擾動'],
             ['歷史年化平均報酬', result.historicalStats.mean / 100, '直接以所選市場年度資料計算'],
             ['歷史年化波動率', result.historicalStats.volatility / 100, '直接以所選市場年度簡單報酬的母體標準差計算'],

@@ -128,8 +128,8 @@
     };
   }
   // 每個區塊都是原始資料上連續的曆年，且同一條 30 年路徑不可重複使用來源年。先將所有
-  // 可用區塊洗牌、再貪婪挑不重疊者；50 年資料對 30 年路徑與最長 3 年區塊一定足夠，不靠
-  // 可能失敗的重試迴圈。年度擾動只改幅度，報酬與 CPI 共用同一個 u，保留同期關係。
+  // 舊版成功的 30 年抽樣保留原序列；其餘使用隨機切段與洗牌，保證資料足夠時完成。
+  // 不重複年份、不使用重試迴圈。年度擾動只改幅度，報酬與 CPI 共用同一個 u，保留同期關係。
   function generateHistoricalSharedPathInputs(
     settings,
     inflation,
@@ -172,37 +172,34 @@
         blockYears.forEach(year => used.add(year));
         if (selected.length === blocksPerPath) break;
       }
-      if (selected.length !== blocksPerPath)
-        throw new Error(`歷史資料不足，無法組成不重複的 ${horizonYears} 年區塊路徑`);
-      return selected;
+      return selected.length === blocksPerPath ? selected : null;
     };
-    // Default 30-year runs retain their historical random stream exactly. Longer or remainder horizons
-    // use a shuffled partition of the source years, which guarantees uniqueness without retry loops.
+    // Preserve successful legacy 30-year draws. Otherwise partition every source year exactly
+    // once, randomize the cut phase, and shuffle ALL blocks (including short boundary blocks).
+    // No retries or duplicated years are needed, even when the horizon uses the entire history.
     const chooseYears = () => {
-      if (horizonYears === sim.HORIZON_YEARS) return chooseBlocks().flat().slice(0, horizonYears);
-      const blocks = [];
-      let block = [];
-      for (const year of years) {
-        if (block.length && (year !== block.at(-1) + 1 || block.length === blockLength)) {
-          blocks.push(block);
-          block = [];
+      let blocks = horizonYears === sim.HORIZON_YEARS ? chooseBlocks() : null;
+      if (!blocks) {
+        blocks = [];
+        let block = [];
+        let limit = 1 + Math.floor(next() * blockLength);
+        for (const year of years) {
+          if (block.length && (year !== block.at(-1) + 1 || block.length === limit)) {
+            blocks.push(block);
+            block = [];
+            limit = blockLength;
+          }
+          block.push(year);
         }
-        block.push(year);
+        if (block.length) blocks.push(block);
+        for (let index = blocks.length - 1; index > 0; index--) {
+          const other = Math.floor(next() * (index + 1));
+          [blocks[index], blocks[other]] = [blocks[other], blocks[index]];
+        }
       }
-      if (block.length) blocks.push(block);
-      const partial = blocks.at(-1)?.length < blockLength ? blocks.pop() : null;
-      for (let index = blocks.length - 1; index > 0; index--) {
-        const other = Math.floor(next() * (index + 1));
-        [blocks[index], blocks[other]] = [blocks[other], blocks[index]];
-      }
-      if (partial) blocks.push(partial);
-      const selected = [];
-      for (const candidate of blocks) {
-        selected.push(...candidate);
-        if (selected.length >= horizonYears) break;
-      }
-      if (selected.length < horizonYears) throw new Error(`歷史資料不足，無法組成不重複的 ${horizonYears} 年區塊路徑`);
-      return selected.slice(0, horizonYears);
+      return blocks
+        .flatMap((block, index) => block.map((year, position) => ({ year, block: index + 1, position: position + 1 })))
+        .slice(0, horizonYears);
     };
     return Array.from({ length: settings.paths }, () => {
       const coreReturns = [];
@@ -223,7 +220,8 @@
       const incomeResiduals = realIncomeProfiles.length
         ? Object.fromEntries(realIncomeProfiles.map(kind => [kind, {}]))
         : null;
-      chooseYears().forEach((year, index) => {
+      chooseYears().forEach((source, index) => {
+        const { year } = source;
         const pathYear = index + 1;
         const jitter = jitterBound ? (next() * 2 - 1) * jitterBound : 0;
         const factor = 1 + jitter;
@@ -232,9 +230,7 @@
         coreReturns.push(annualReturn);
         inflationRates[pathYear] = cpi;
         historicalSources.push({
-          year,
-          block: Math.floor(index / blockLength) + 1,
-          position: (index % blockLength) + 1,
+          ...source,
           jitter,
         });
         if (includeMonthly) {
